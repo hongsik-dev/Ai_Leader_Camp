@@ -67,6 +67,20 @@ function hongsik_log_enqueue_assets() {
 }
 add_action( 'wp_enqueue_scripts', 'hongsik_log_enqueue_assets' );
 
+function hongsik_log_order_learning_posts( $query ) {
+	if ( is_admin() || ! $query->is_main_query() ) {
+		return;
+	}
+
+	if ( $query->is_home() || $query->is_category() || $query->is_tag() || $query->is_date() ) {
+		$query->set( 'orderby', 'date' );
+		$query->set( 'order', 'ASC' );
+		$query->set( 'posts_per_page', -1 );
+		$query->set( 'nopaging', true );
+	}
+}
+add_action( 'pre_get_posts', 'hongsik_log_order_learning_posts' );
+
 function hongsik_log_icon( $name ) {
 	$icons = array(
 		'home'    => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 10.8 12 4l8 6.8v8.7a.5.5 0 0 1-.5.5h-5v-5.8h-5V20h-5a.5.5 0 0 1-.5-.5v-8.7Z"/></svg>',
