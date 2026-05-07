@@ -11,6 +11,7 @@ Thumbs.db
 *.png
 *.jpg
 *.jpeg
+!hongsik-log/assets/profile-hongsik.png
 
 # Secrets
 *.pem

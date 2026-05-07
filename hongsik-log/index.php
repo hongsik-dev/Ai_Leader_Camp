@@ -9,9 +9,7 @@ get_header();
 ?>
 
 <div class="layout">
-	<?php get_template_part( 'sidebar-tags' ); ?>
-
-	<section class="content-area">
+	<section id="archive" class="content-area">
 		<?php if ( is_home() && ! is_paged() ) : ?>
 			<div class="archive-heading">
 				<p class="archive-kicker">AI LEADER CAMP LOG</p>

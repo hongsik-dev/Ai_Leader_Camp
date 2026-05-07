@@ -47,6 +47,19 @@ function hongsik_log_enqueue_assets() {
 }
 add_action( 'wp_enqueue_scripts', 'hongsik_log_enqueue_assets' );
 
+function hongsik_log_icon( $name ) {
+	$icons = array(
+		'home'    => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 10.8 12 4l8 6.8v8.7a.5.5 0 0 1-.5.5h-5v-5.8h-5V20h-5a.5.5 0 0 1-.5-.5v-8.7Z"/></svg>',
+		'tag'     => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h6.1c.4 0 .8.2 1.1.4l7 7a1.5 1.5 0 0 1 0 2.2l-6.1 6.1a1.5 1.5 0 0 1-2.2 0l-7-7c-.3-.3-.4-.7-.4-1.1V5.5Zm4.4 2a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Z"/></svg>',
+		'archive' => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5V8H4V5.5Zm1.5 4H18.5V19A1.5 1.5 0 0 1 17 20H7a1.5 1.5 0 0 1-1.5-1.5v-9ZM9 12v1.5h6V12H9Z"/></svg>',
+		'github'  => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 5.5a2.5 2.5 0 1 1 3.2 2.4v2.4h3.6V7.9a2.5 2.5 0 1 1 1.8 0v3.3c0 .5-.4.9-.9.9h-4.5v4a2.5 2.5 0 1 1-1.8 0V7.9A2.5 2.5 0 0 1 7 5.5Z"/></svg>',
+		'rss'     => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6.3 16.2a2.3 2.3 0 1 1 0 4.6 2.3 2.3 0 0 1 0-4.6ZM4 9.8c5.6 0 10.2 4.6 10.2 10.2h-2.7A7.5 7.5 0 0 0 4 12.5V9.8Zm0-5.8c8.8 0 16 7.2 16 16h-2.8C17.2 12.7 11.3 6.8 4 6.8V4Z"/></svg>',
+		'about'   => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 12.6a4.2 4.2 0 1 0 0-8.4 4.2 4.2 0 0 0 0 8.4Zm-7 7.2c.7-3.4 3.5-5.5 7-5.5s6.3 2.1 7 5.5a.7.7 0 0 1-.7.8H5.7a.7.7 0 0 1-.7-.8Z"/></svg>',
+	);
+
+	return isset( $icons[ $name ] ) ? $icons[ $name ] : '';
+}
+
 function hongsik_log_excerpt_length() {
 	return 46;
 }
