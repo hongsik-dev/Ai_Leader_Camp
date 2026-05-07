@@ -17,6 +17,7 @@ Thumbs.db
 *.key
 .env
 .env.*
+server-config/
 
 # WordPress/runtime noise
 wp-content/uploads/
