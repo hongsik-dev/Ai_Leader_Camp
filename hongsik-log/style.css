@@ -3,7 +3,7 @@ Theme Name: Hongsik Log
 Theme URI: https://example.com/hongsik-log
 Author: Hongsik
 Description: A minimal developer learning log theme for AI Leader Camp notes.
-Version: 1.0.3
+Version: 1.0.4
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.0
@@ -479,6 +479,8 @@ main {
   max-width: 680px;
   margin: 16px 0 0;
   color: #4f565e;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .map-panel {
@@ -663,6 +665,245 @@ main {
   white-space: nowrap;
 }
 
+.learning-assistant-page {
+  min-width: 0;
+  max-width: var(--content);
+}
+
+.assistant-intro {
+  max-width: 700px;
+  margin: 16px 0 0;
+  color: #4f565e;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.assistant-workbench {
+  margin-top: 30px;
+}
+
+.assistant-form {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.assistant-panel {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 14px 30px rgba(31, 37, 45, 0.07);
+}
+
+.assistant-panel-head {
+  margin-bottom: 18px;
+}
+
+.assistant-panel-head h2 {
+  margin: 0;
+  font-size: 1.18rem;
+  line-height: 1.35;
+}
+
+.assistant-field {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+.assistant-field span {
+  color: #3d444b;
+  font-size: 0.9rem;
+  font-weight: 760;
+}
+
+.assistant-field input,
+.assistant-field select,
+.assistant-field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffefa;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.94rem;
+}
+
+.assistant-field input,
+.assistant-field select {
+  min-height: 42px;
+  padding: 8px 10px;
+}
+
+.assistant-field textarea {
+  min-height: 104px;
+  padding: 10px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.assistant-field input:focus,
+.assistant-field select:focus,
+.assistant-field textarea:focus,
+.assistant-output textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--line));
+  outline: 3px solid color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.assistant-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.7fr);
+  gap: 12px;
+}
+
+.assistant-actions,
+.assistant-output-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.assistant-actions {
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
+.assistant-primary,
+.assistant-quiet,
+.assistant-output-head button,
+.assistant-output-tabs button {
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 780;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.assistant-primary {
+  border-color: color-mix(in srgb, var(--accent) 64%, #1d4f7a);
+  background: var(--accent);
+  color: #fff;
+}
+
+.assistant-quiet,
+.assistant-output-head button,
+.assistant-output-tabs button {
+  background: #fffefa;
+  color: #4d545b;
+}
+
+.assistant-primary:hover,
+.assistant-quiet:hover,
+.assistant-output-head button:hover,
+.assistant-output-tabs button:hover,
+.assistant-output-tabs button.is-active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.assistant-save-state {
+  margin: 12px 0 0;
+  color: var(--quiet);
+  font-size: 0.84rem;
+}
+
+.assistant-output-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.assistant-output {
+  display: none;
+}
+
+.assistant-output.is-active {
+  display: block;
+}
+
+.assistant-output-head {
+  margin-bottom: 10px;
+}
+
+.assistant-output-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.assistant-output textarea {
+  width: 100%;
+  min-height: 430px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfaf6;
+  color: #343a40;
+  font: 0.9rem/1.62 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  resize: vertical;
+}
+
+.assistant-tag-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.assistant-tag-box span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.84rem;
+  font-weight: 780;
+}
+
+.assistant-plan-box table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 16px;
+  font-size: 0.92rem;
+}
+
+.assistant-plan-box th,
+.assistant-plan-box td {
+  padding: 10px;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.assistant-plan-box th {
+  width: 118px;
+  background: #f1eee8;
+  color: #3d444b;
+}
+
+.assistant-checklist {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding-left: 21px;
+  color: #4d545b;
+  font-size: 0.94rem;
+}
+
 .site-footer {
   grid-column: 2;
   max-width: var(--content);
@@ -827,5 +1068,38 @@ main {
 
   .category-block time {
     white-space: normal;
+  }
+
+  .assistant-form {
+    grid-template-columns: 1fr;
+  }
+
+  .assistant-panel {
+    padding: 16px;
+  }
+
+  .assistant-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .assistant-actions,
+  .assistant-output-head {
+    align-items: stretch;
+  }
+
+  .assistant-primary,
+  .assistant-quiet,
+  .assistant-output-head button {
+    flex: 1 1 auto;
+  }
+
+  .assistant-output textarea {
+    min-height: 360px;
+    font-size: 0.84rem;
+  }
+
+  .assistant-plan-box {
+    overflow-x: auto;
   }
 }

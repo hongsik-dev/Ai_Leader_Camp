@@ -10,6 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $about_page = hongsik_log_get_about_page();
+$learning_assistant_page = hongsik_log_get_learning_assistant_page();
 $learning_map_page = hongsik_log_get_learning_map_page();
 $github_url = get_theme_mod( 'hongsik_log_github_url', '' );
 $profile_image = get_template_directory_uri() . '/assets/profile-hongsik.png';
@@ -38,6 +39,9 @@ $profile_image = get_template_directory_uri() . '/assets/profile-hongsik.png';
 			<a href="<?php echo esc_url( home_url( '/' ) ); ?>"><?php echo hongsik_log_icon( 'home' ); ?><span>Home</span></a>
 			<a href="<?php echo esc_url( home_url( '/#tags' ) ); ?>"><?php echo hongsik_log_icon( 'tag' ); ?><span>태그</span></a>
 			<a href="<?php echo esc_url( home_url( '/#archive' ) ); ?>"><?php echo hongsik_log_icon( 'archive' ); ?><span>아카이브</span></a>
+			<?php if ( $learning_assistant_page ) : ?>
+				<a href="<?php echo esc_url( get_permalink( $learning_assistant_page ) ); ?>"><?php echo hongsik_log_icon( 'write' ); ?><span>기록도우미</span></a>
+			<?php endif; ?>
 			<?php if ( $learning_map_page ) : ?>
 				<a href="<?php echo esc_url( get_permalink( $learning_map_page ) ); ?>"><?php echo hongsik_log_icon( 'map' ); ?><span>학습맵</span></a>
 			<?php endif; ?>
