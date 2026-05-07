@@ -4,7 +4,7 @@ AI 리더 캠프 학습 과정을 기록하기 위한 WordPress 블로그 테마
 
 ## 구성
 
-- `hongsik-log/`: hudi.blog 분위기를 참고한 미니멀 WordPress 테마
+- `hongsik-log/`: AI 리더 캠프 학습 기록용 미니멀 WordPress 테마
 - `wp-content-seed/`: About 페이지와 첫 글 초기 콘텐츠
 
 ## 서버
