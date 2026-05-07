@@ -3,7 +3,7 @@ Theme Name: Hongsik Log
 Theme URI: https://example.com/hongsik-log
 Author: Hongsik
 Description: A minimal developer learning log theme for AI Leader Camp notes.
-Version: 1.0.2
+Version: 1.0.3
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.0
@@ -470,6 +470,199 @@ main {
   color: var(--muted);
 }
 
+.learning-map-page {
+  min-width: 0;
+  max-width: var(--content);
+}
+
+.map-intro {
+  max-width: 680px;
+  margin: 16px 0 0;
+  color: #4f565e;
+}
+
+.map-panel {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 86%, #eef6fb);
+  box-shadow: 0 16px 34px rgba(31, 37, 45, 0.08);
+}
+
+.map-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.map-toolbar button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: #4d545b;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 760;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.map-toolbar button:hover,
+.map-toolbar button.is-active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.map-stage {
+  position: relative;
+  min-height: 420px;
+  height: 580px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, #fff);
+  border-radius: 8px;
+  background:
+    linear-gradient(rgba(47, 61, 76, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 61, 76, 0.045) 1px, transparent 1px),
+    radial-gradient(circle at 50% 42%, rgba(47, 120, 183, 0.1), transparent 42%),
+    #fbfaf6;
+  background-size: 28px 28px, 28px 28px, auto, auto;
+}
+
+#learning-map-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+#learning-map-canvas.is-clickable {
+  cursor: pointer;
+}
+
+.map-hint {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 12px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid rgba(228, 222, 212, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 254, 250, 0.92);
+  color: #59616a;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.87rem;
+}
+
+.map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.map-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--quiet);
+}
+
+.map-legend i.root {
+  width: 13px;
+  height: 13px;
+  background: #101820;
+}
+
+.map-legend i.category {
+  background: var(--accent);
+}
+
+.map-legend i.post {
+  background: #cf7746;
+}
+
+.map-legend i.tag {
+  background: #6f757c;
+}
+
+.map-list {
+  margin-top: 44px;
+}
+
+.archive-heading.compact {
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+}
+
+.category-index {
+  display: grid;
+  gap: 18px;
+}
+
+.category-block {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.category-block h3 {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+  line-height: 1.35;
+}
+
+.category-block h3 a {
+  text-decoration: none;
+}
+
+.category-block ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.category-block li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.category-block li a {
+  min-width: 0;
+  color: #343a40;
+  font-weight: 720;
+  line-height: 1.45;
+  text-decoration: none;
+}
+
+.category-block li a:hover {
+  color: var(--accent);
+}
+
+.category-block time {
+  color: var(--quiet);
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
 .site-footer {
   grid-column: 2;
   max-width: var(--content);
@@ -599,5 +792,40 @@ main {
 
   .post-navigation .next {
     text-align: left;
+  }
+
+  .map-panel {
+    padding: 14px;
+  }
+
+  .map-stage {
+    height: 440px;
+    min-height: 360px;
+  }
+
+  .map-toolbar button {
+    min-height: 32px;
+    padding: 6px 10px;
+    font-size: 0.82rem;
+  }
+
+  .map-hint {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    font-size: 0.8rem;
+  }
+
+  .category-block {
+    padding: 17px 16px;
+  }
+
+  .category-block li {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .category-block time {
+    white-space: normal;
   }
 }
