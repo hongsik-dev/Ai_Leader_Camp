@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">CatchPro</string>
+    <string name="accessibility_service_label">CatchPro Observation</string>
+    <string name="accessibility_service_description">Captures visible text trees from the foreground app so order layouts can be inspected before building matching logic.</string>
+</resources>

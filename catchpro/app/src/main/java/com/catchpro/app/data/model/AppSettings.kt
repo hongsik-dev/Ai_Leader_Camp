@@ -1,0 +1,41 @@
+package com.catchpro.app.data.model
+
+data class AppSettings(
+    val clientBlacklistText: String = "오마이퀵서비스-1566-5912\n오산드림퀵",
+    val alertsEnabled: Boolean = true,
+    val vibrationEnabled: Boolean = true,
+    val voiceAlertsEnabled: Boolean = true,
+    val keepScreenOn: Boolean = false,
+    val primaryOrderListAutoEntryEnabled: Boolean = false,
+    val secondaryOrderListAutoEntryEnabled: Boolean = false,
+    val orderListAutoEntryMaxChecksText: String = "30",
+    val kakaoRestApiKey: String = "",
+    val historyRetentionDays: Int = 14,
+    val observationPackageFilters: String = "",
+    val activeDriveDestinationText: String = "",
+    val tmapManualRouteAddressesText: String = "",
+    val routeAddressCloudSyncEnabled: Boolean = false,
+    val routeAddressCloudSyncRoomCode: String = "250501",
+    val routeAddressCloudSyncServerUrl: String = "ws://43.200.8.165/catchpro-sync",
+    val primaryAutoConfirmEnabled: Boolean = false,
+    val primaryDestinationKeywords: String = "",
+    val primaryAutoConfirmExcludedKeywordsText: String =
+        "사다주기, 물건사다, 물건사다주기, 사서전달, AS, AS센터, AS방문, 에이에스, 에이에스센터, 방문후, 방문하고, 대기, 대기시간, 대기비, 법원, 집행, 증인, 심부름, 시간예약, 시간정해진, 예약, 왕복, 복귀",
+    val trackingAutoConfirmExcludedKeywordsText: String =
+        "핸드폰, 휴대폰, 모바일, 폰, 사다주기, 물건사다, 물건사다주기, 사서전달, AS, AS센터, AS방문, 에이에스, 에이에스센터, 방문후, 방문하고, 대기, 대기시간, 대기비, 법원, 집행, 증인, 심부름, 시간예약, 시간정해진, 예약, 왕복, 복귀",
+    val autoConfirmExcludedKeywordsText: String =
+        "핸드폰, 휴대폰, 모바일, 폰, 사다주기, 물건사다, 물건사다주기, 사서전달, AS, AS센터, AS방문, 에이에스, 에이에스센터, 방문후, 방문하고, 대기, 대기시간, 대기비, 법원, 집행, 증인, 심부름, 시간예약, 시간정해진, 예약, 왕복, 복귀",
+    val primaryMinimumPriceText: String = "",
+    val primaryMaximumPickupDistanceKmText: String = "",
+    val primaryMaximumRouteDistanceKmText: String = "",
+    val primaryLongDistanceRuleEnabled: Boolean = true,
+    val primaryLongDistanceThresholdKmText: String = "40",
+    val primaryLongDistanceMinimumPriceText: String = "42000",
+    val secondaryAutoConfirmEnabled: Boolean = false,
+    val secondaryMaximumPickupDistanceKmText: String = "",
+    val secondaryDestinationRadiusKmText: String = "",
+    val orderTrackingModeEnabled: Boolean = false,
+    val orderTrackingMaximumRouteDistanceKmText: String = "",
+    val orderTrackingMaxConfirmCountText: String = "2",
+    val onboardingCompleted: Boolean = false,
+)

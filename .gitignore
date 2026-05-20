@@ -12,6 +12,8 @@ Thumbs.db
 *.jpg
 *.jpeg
 !hongsik-log/assets/profile-hongsik.png
+!catchpro/app/src/main/res/**/*.png
+!catchpro/app/src/main/res/**/*.webp
 
 # Secrets
 *.pem
@@ -24,3 +26,29 @@ server-config/
 wp-content/uploads/
 wp-content/cache/
 wp-content/upgrade/
+
+# CatchPro Android local/generated files
+catchpro/local.properties
+catchpro/.gradle/
+catchpro/.idea/
+catchpro/.kotlin/
+catchpro/.android/
+catchpro/.android-user/
+catchpro/.android-user-home/
+catchpro/.gradle-home/
+catchpro/.gradle-user/
+catchpro/.gradle-user-home/
+catchpro/.tmp-debug/
+catchpro/build/
+catchpro/**/build/
+catchpro/*.db
+catchpro/*.db-*
+catchpro/*.preferences_pb
+catchpro/analysis/
+catchpro/analysis_logs/
+catchpro/captures/
+catchpro/data/
+catchpro/diagnostics/
+catchpro/tmp_device_logs/
+catchpro/tmp_naver_aar/
+catchpro/wp-content-seed/

@@ -1,0 +1,7 @@
+# Copy this file to local.properties on your own machine.
+# Do not commit local.properties because it contains local paths and API keys.
+
+sdk.dir=C:\\Path\\To\\Android\\Sdk
+kakao.rest.api.key=
+naver.map.ncp.key.id=
+naver.map.ncp.key=

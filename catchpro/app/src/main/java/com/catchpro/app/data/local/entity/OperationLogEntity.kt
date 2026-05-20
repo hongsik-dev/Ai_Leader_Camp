@@ -1,0 +1,50 @@
+package com.catchpro.app.data.local.entity
+
+import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.PrimaryKey
+
+@Entity(
+    tableName = "operation_logs",
+    indices = [
+        Index("createdAtMillis"),
+        Index("eventType"),
+        Index("status"),
+        Index("mode"),
+        Index("orderSignature"),
+    ],
+)
+data class OperationLogEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val eventType: String,
+    val status: String? = null,
+    val orderSignature: String? = null,
+    val mode: String? = null,
+    val source: String? = null,
+    val region: String? = null,
+    val clientText: String? = null,
+    val orderTitle: String? = null,
+    val originSummary: String? = null,
+    val destinationSummary: String? = null,
+    val requesterLocation: String? = null,
+    val pickupAddress: String? = null,
+    val dropoffAddress: String? = null,
+    val detailNote: String? = null,
+    val price: Int? = null,
+    val currentToPickupDistanceKm: Double? = null,
+    val pickupToDropoffStraightKm: Double? = null,
+    val estimatedPickupToDropoffRoadKm: Double? = null,
+    val pickupRoadDistanceKm: Double? = null,
+    val destinationMatchDistanceKm: Double? = null,
+    val farePerStraightKm: Double? = null,
+    val farePerEstimatedRoadKm: Double? = null,
+    val shouldConfirm: Boolean? = null,
+    val confirmed: Boolean? = null,
+    val manualInputRequired: Boolean? = null,
+    val manualReviewRequired: Boolean? = null,
+    val reason: String? = null,
+    val clickDiagnostic: String? = null,
+    val screenSummary: String? = null,
+    val rawContext: String? = null,
+    val createdAtMillis: Long = System.currentTimeMillis(),
+)
