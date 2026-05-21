@@ -37,6 +37,21 @@ android {
         }
     }
 
+    flavorDimensions += "deviceRole"
+    productFlavors {
+        create("insung") {
+            dimension = "deviceRole"
+            applicationId = "com.catchpro.app"
+            buildConfigField("boolean", "IS_NAVI_APP", "false")
+        }
+        create("navi") {
+            dimension = "deviceRole"
+            applicationId = "com.catchpro.app"
+            versionNameSuffix = "-navi"
+            buildConfigField("boolean", "IS_NAVI_APP", "true")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -104,7 +119,7 @@ dependencies {
 
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.naver.maps:map-sdk:3.23.2")
+    add("naviImplementation", "com.naver.maps:map-sdk:3.23.2")
 
     implementation("com.google.dagger:hilt-android:2.59.2")
     ksp("com.google.dagger:hilt-android-compiler:2.59.2")

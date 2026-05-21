@@ -17,6 +17,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.catchpro.app.BuildConfig
 import com.catchpro.app.data.model.OrderEventDraft
 import com.catchpro.app.data.repository.AccessibilityCaptureRepository
 import com.catchpro.app.data.repository.OrderEventRepository
@@ -45,7 +46,12 @@ fun CatchProNavHost(
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
-    val showBottomBar = topLevelDestinations.any { destination ->
+    val availableTopLevelDestinations = if (BuildConfig.IS_NAVI_APP) {
+        emptyList()
+    } else {
+        topLevelDestinations
+    }
+    val showBottomBar = availableTopLevelDestinations.any { destination ->
         currentDestination?.hierarchy?.any { it.route == destination.route } == true
     }
 
@@ -53,7 +59,7 @@ fun CatchProNavHost(
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar {
-                    topLevelDestinations.forEach { destination ->
+                    availableTopLevelDestinations.forEach { destination ->
                         val selected = currentDestination?.hierarchy?.any {
                             it.route == destination.route
                         } == true
@@ -83,7 +89,7 @@ fun CatchProNavHost(
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Routes.Onboarding,
+            startDestination = if (BuildConfig.IS_NAVI_APP) Routes.TmapQueue else Routes.Onboarding,
             modifier = Modifier.padding(innerPadding),
         ) {
             composable(Routes.Onboarding) {

@@ -151,6 +151,30 @@ class TmapQueueViewModel(
         }
     }
 
+    fun completeManualAddress(index: Int) {
+        if (index !in 0 until ManualRouteAddressSlotCount) return
+        val updated = _uiState.value.manualRouteAddresses
+            .toManualRouteAddressSlots()
+            .updated(index, "")
+        _uiState.update { current ->
+            current.copy(
+                manualRouteAddresses = updated,
+                routePlan = null,
+                routeAddressMap = current.routeAddressMap.copy(
+                    points = current.routeAddressMap.points.filterNot { it.sourceIndex == index },
+                    nearestStops = emptyList(),
+                    nearestTotalDistanceKm = null,
+                    nearestTotalDurationText = null,
+                    message = "방문 완료 주소를 삭제했습니다. 지도를 갱신합니다.",
+                ),
+                message = "주소 ${index + 1} 방문 완료로 삭제했습니다.",
+            )
+        }
+        viewModelScope.launch {
+            settingsRepository.setTmapManualRouteAddressesText(updated.joinToString("\n"))
+        }
+    }
+
     fun clearManualAddresses() {
         _uiState.update {
             it.copy(
@@ -445,22 +469,10 @@ class TmapQueueViewModel(
                 distanceKmFromCurrentLocation = currentPoint?.let { haversineDistanceKm(it, point) },
             )
         }
-        val currentSameAddressCount = currentPoint?.let {
-            points.count { point ->
-                (point.distanceKmFromCurrentLocation ?: Double.MAX_VALUE) <= CurrentSameAddressThresholdKm
-            }
-        } ?: 0
-        val routeCandidatePoints = if (currentPoint != null) {
-            points.filter { point ->
-                (point.distanceKmFromCurrentLocation ?: Double.MAX_VALUE) > CurrentSameAddressThresholdKm
-            }
-        } else {
-            points
-        }
         val nearestStops = if (currentPoint != null) {
             buildNearestNaverRouteStops(
                 currentPoint = currentPoint,
-                points = routeCandidatePoints,
+                points = points,
                 routeDistanceService = routeDistanceService,
                 clientId = BuildConfig.NAVER_MAP_NCP_KEY_ID.trim(),
                 clientSecret = BuildConfig.NAVER_MAP_NCP_KEY.trim(),
@@ -480,7 +492,6 @@ class TmapQueueViewModel(
             inputs.isEmpty() -> "주소를 붙여넣으면 지도에 표시됩니다."
             points.isEmpty() -> "네이버 Geocoding이 주소 좌표를 찾지 못했습니다. API 권한/인증 정보와 주소 형식을 확인해 주세요."
             currentLocation == null -> locationResult.failureReason ?: "현재 위치를 가져오지 못해 거리 계산은 생략했습니다."
-            currentSameAddressCount > 0 -> "현위치와 같은 주소 ${currentSameAddressCount}개는 방문 순서에서 제외했습니다."
             points.size < inputs.size -> "일부 주소는 네이버 Geocoding 좌표를 찾지 못했습니다."
             else -> null
         }
@@ -565,7 +576,6 @@ private data class GreedyRouteCandidate(
 private const val ManualRouteAddressSlotCount = 6
 private const val MaxRoutePermutationSize = 5
 private const val NearestRouteAddressLimit = 6
-private const val CurrentSameAddressThresholdKm = 0.12
 private const val MapRefreshDebounceMillis = 180L
 
 private fun String.toManualRouteAddressSlots(): List<String> =

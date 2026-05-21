@@ -1416,6 +1416,88 @@ flowchart TD
     H --> S["픽업완료/배송완료/취소 상태 반영"]
 ```
 
+## 2026-05-21 역할별 APK 분리
+
+운행용 휴대폰 2대 운영을 전제로 `insung` / `navi` 빌드 변형을 추가했습니다. 같은 코드베이스를 유지하되 APK와 패키지명을 분리해서 한쪽은 오더 확정, 다른 한쪽은 지도/네비에 집중하도록 했습니다.
+
+| 변형 | 앱 이름 | 패키지 | 목적 |
+| --- | --- | --- | --- |
+| `insungDebug` | `CatchPro` | `com.catchpro.app` | 인성데이터폰. 접근성 서비스와 자동상세확정/자동확정 유지 |
+| `naviDebug` | `CatchPro Navi` | `com.catchpro.app` | 지도네비폰. 전체화면 지도, AWS 주소 수신, 네이버/TMAP 실행, 완료 처리 |
+
+핵심 구현:
+
+```kotlin
+productFlavors {
+    create("insung") {
+        dimension = "deviceRole"
+        applicationId = "com.catchpro.app"
+        buildConfigField("boolean", "IS_NAVI_APP", "false")
+    }
+    create("navi") {
+        dimension = "deviceRole"
+        applicationId = "com.catchpro.app"
+        versionNameSuffix = "-navi"
+        buildConfigField("boolean", "IS_NAVI_APP", "true")
+    }
+}
+```
+
+Navi 변형은 `BuildConfig.IS_NAVI_APP` 기준으로 바로 `Routes.TmapQueue`에서 시작하고 하단 내비게이션을 숨깁니다. `app/src/navi/AndroidManifest.xml`에서는 `CatchProAccessibilityService`를 제거해서 지도네비폰에는 접근성 자동화 서비스가 노출되지 않게 했습니다.
+
+Navi 변형의 패키지는 네이버 Cloud Console에 이미 등록된 `com.catchpro.app`을 그대로 사용합니다. 운행 구조가 인성데이터폰/네비폰 2대 분리이므로 같은 휴대폰에 두 APK를 동시에 설치하는 것보다, 각 휴대폰에 역할별 APK를 설치하는 방식을 우선합니다. 이렇게 하면 네이버 Dynamic Map의 Android 패키지 인증이 깨질 가능성을 줄일 수 있습니다.
+
+지도네비폰 화면은 `TmapQueueScreen` 내부에서 `NaviRouteMapContent`로 분기합니다.
+
+```kotlin
+if (BuildConfig.IS_NAVI_APP) {
+    NaviRouteMapContent(...)
+    return
+}
+```
+
+Navi 화면 동작:
+
+1. AWS 주소 동기화로 주소 1~6을 받음
+2. 네이버 지도 전체화면에 현재 위치와 주소 마커 표시
+3. 마커 클릭 시 하단 패널 표시
+4. 하단 패널에서 `네이버`, `TMAP`, `완료` 실행
+5. `완료` 클릭 시 해당 주소 슬롯 삭제, 지도 마커 삭제, AWS로 빈 슬롯 동기화
+
+설정탭에서는 사용자에게 혼란을 주던 `실제 주행거리 계산` 카드를 숨겼습니다. 기준오더 확정은 도착지 조건과 요금 조건 중심으로 유지하고, 주행거리/예상시간은 지도네비폰에서 네이버 지도/길찾기용으로만 다룹니다.
+
+### 2026-05-22 네이버 지도 SDK flavor 분리
+
+인성데이터폰 APK의 안정성과 오더확정 속도 우선 원칙에 맞춰 네이버 지도 SDK를 `navi` 변형에만 포함하도록 분리했습니다. 공통 의존성의 `map-sdk`를 제거하고 `naviImplementation`으로 옮겼으며, 지도 렌더링 구현은 `app/src/navi`로 이동했습니다.
+
+```kotlin
+dependencies {
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    add("naviImplementation", "com.naver.maps:map-sdk:3.23.2")
+}
+```
+
+공통 `CatchProApplication`은 flavor별 초기화 진입점만 호출합니다. `insung` 변형은 no-op이라 네이버 SDK를 전혀 참조하지 않고, `navi` 변형에서만 `NaverMapSdk`를 초기화합니다.
+
+```kotlin
+@HiltAndroidApp
+class CatchProApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        FlavorNaverMapInitializer.initialize(this)
+    }
+}
+```
+
+인성 변형에는 `NaverRouteAddressMap`의 경량 대체 구현을 두어 TMAP 연결 화면이 컴파일되도록 유지하되, 네이버 지도 네이티브 라이브러리와 지도 리소스는 포함하지 않습니다. 검증 결과 `insungDebug` APK 내부에는 `libnavermap.so`와 `navermap` 리소스가 없고, `naviDebug` APK에만 포함됩니다.
+
+지도네비폰 안정성 개선도 함께 반영했습니다.
+
+- 네이버 지도 실행 딥링크의 `appname`은 고정값 대신 `context.packageName`을 사용합니다.
+- 네이버 지도 객체는 최초 1회 `getMapAsync`로 확보하고, 이후에는 기존 마커/경로 객체를 키 기준으로 갱신합니다.
+- 입력된 주소는 현위치와 가까워도 방문 후보에서 제외하지 않습니다.
+- 전체화면 지도 상단/하단 패널은 시스템 상태바/내비게이션바 패딩을 반영합니다.
+
 ## 결론
 
 현재 CatchPro의 핵심 기능은 "오더 리스트에서 빠르게 상세로 들어가고, 상세화면에서 조건을 평가해 자동확정하거나 제외하며, 그 모든 과정을 정밀로그로 남기는 것"입니다.

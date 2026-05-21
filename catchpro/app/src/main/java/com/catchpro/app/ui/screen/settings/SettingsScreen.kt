@@ -185,19 +185,6 @@ fun SettingsScreen(
                     )
                 },
             )
-            RoadDistanceApiCard(
-                kakaoApiKey = kakaoRestApiKeyDraft,
-                locationPermissionGranted = locationPermissionGranted,
-                builtInKakaoApiKeyAvailable = BuildConfig.KAKAO_REST_API_KEY.isNotBlank(),
-                onRequestLocationPermission = {
-                    locationPermissionLauncher.launch(
-                        arrayOf(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                        ),
-                    )
-                },
-            )
             InternalLogNoticeCard()
             AdvancedDiagnosticsCard(
                 expanded = showAdvancedDiagnostics,

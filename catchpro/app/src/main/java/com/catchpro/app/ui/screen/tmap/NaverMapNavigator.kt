@@ -7,7 +7,6 @@ import android.net.Uri
 
 object NaverMapNavigator {
     private const val NaverMapPackageName = "com.nhn.android.nmap"
-    private const val AppName = "com.catchpro.app"
 
     fun launchNavigation(
         context: Context,
@@ -21,7 +20,7 @@ object NaverMapNavigator {
             .appendQueryParameter("dlat", latitude.toString())
             .appendQueryParameter("dlng", longitude.toString())
             .appendQueryParameter("dname", name.ifBlank { "목적지" })
-            .appendQueryParameter("appname", AppName)
+            .appendQueryParameter("appname", context.packageName)
             .build()
         return launchNaverMap(context, url)
     }
@@ -36,7 +35,7 @@ object NaverMapNavigator {
             .scheme("nmap")
             .authority("search")
             .appendQueryParameter("query", normalized)
-            .appendQueryParameter("appname", AppName)
+            .appendQueryParameter("appname", context.packageName)
             .build()
         return launchNaverMap(context, url)
     }
