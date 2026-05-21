@@ -119,32 +119,6 @@ fun TmapQueueScreen(
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            RouteAddressNaverMapCard(
-                mapState = uiState.routeAddressMap,
-                isRefreshing = uiState.isRefreshingMap,
-                naverMapConfigured = BuildConfig.NAVER_MAP_NCP_KEY_ID.isNotBlank(),
-                locationPermissionGranted = locationPermissionGranted,
-                onRequestLocationPermission = {
-                    locationPermissionLauncher.launch(
-                        arrayOf(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                        ),
-                    )
-                },
-                onRefreshMap = {
-                    viewModel.refreshAddressMap(context, uiState.manualRouteAddresses)
-                },
-                onNavigate = { point ->
-                    NaverMapNavigator.launchNavigation(
-                        context = context,
-                        latitude = point.latitude,
-                        longitude = point.longitude,
-                        name = point.address,
-                    )
-                },
-            )
-
             ManualRoutePlannerCard(
                 addresses = uiState.manualRouteAddresses,
                 mapPoints = uiState.routeAddressMap.points,
