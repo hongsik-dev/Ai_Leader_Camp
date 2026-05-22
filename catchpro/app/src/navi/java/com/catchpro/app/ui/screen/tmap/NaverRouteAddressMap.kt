@@ -1,6 +1,10 @@
 package com.catchpro.app.ui.screen.tmap
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
 import android.os.Bundle
 import android.view.MotionEvent
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,10 +22,11 @@ import com.naver.maps.geometry.LatLngBounds
 import com.naver.maps.map.CameraUpdate
 import com.naver.maps.map.MapView
 import com.naver.maps.map.NaverMap
+import com.naver.maps.map.overlay.CircleOverlay
 import com.naver.maps.map.overlay.Marker
+import com.naver.maps.map.overlay.OverlayImage
 import com.naver.maps.map.overlay.PathOverlay
 import java.util.Locale
-import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -37,8 +42,11 @@ fun NaverRouteAddressMap(
     val naverMapState = remember { mutableStateOf<NaverMap?>(null) }
     val markersByKey = remember { mutableMapOf<String, Marker>() }
     val pathOverlaysByKey = remember { mutableMapOf<String, PathOverlay>() }
+    val startCircleOverlay = remember { CircleOverlay() }
     val userInteracting = remember { mutableStateOf(false) }
     val lastCameraSignature = remember { mutableStateOf<String?>(null) }
+    val currentMarkerIcon = remember { startMarkerIcon() }
+    val nextStopArrowImage = remember { nextStopArrowPatternImage() }
 
     AndroidView(
         modifier = modifier.fillMaxWidth(),
@@ -77,6 +85,9 @@ fun NaverRouteAddressMap(
                 mapState = mapState,
                 markersByKey = markersByKey,
                 pathOverlaysByKey = pathOverlaysByKey,
+                startCircleOverlay = startCircleOverlay,
+                currentMarkerIcon = currentMarkerIcon,
+                nextStopArrowImage = nextStopArrowImage,
                 userInteracting = userInteracting.value,
                 lastCameraSignature = lastCameraSignature,
                 onPointClick = onPointClick,
@@ -97,6 +108,12 @@ private fun NaverMap.configureForRouteAddress() {
     uiSettings.zoomGesturesFriction = 0.15f
     uiSettings.rotateGesturesFriction = 0.15f
     locationOverlay.isVisible = false
+    setContentPadding(
+        MapContentPaddingHorizontal,
+        MapContentPaddingTop,
+        MapContentPaddingHorizontal,
+        MapContentPaddingBottom,
+    )
 }
 
 private fun updateRouteAddressMap(
@@ -104,37 +121,59 @@ private fun updateRouteAddressMap(
     mapState: RouteAddressMapUiState,
     markersByKey: MutableMap<String, Marker>,
     pathOverlaysByKey: MutableMap<String, PathOverlay>,
+    startCircleOverlay: CircleOverlay,
+    currentMarkerIcon: OverlayImage,
+    nextStopArrowImage: OverlayImage,
     userInteracting: Boolean,
     lastCameraSignature: androidx.compose.runtime.MutableState<String?>,
     onPointClick: ((RouteAddressMapPointUiModel) -> Unit)?,
 ) {
-    naverMap.locationOverlay.isVisible = false
-
     val currentLatLng = mapState.currentLatLng()
     val allBoundsPoints = mutableListOf<LatLng>()
-    val occupiedMarkerPositions = mutableListOf<LatLng>()
     val desiredMarkerKeys = mutableSetOf<String>()
     val desiredPathKeys = mutableSetOf<String>()
 
     if (currentLatLng != null) {
+        startCircleOverlay.apply {
+            center = currentLatLng
+            radius = StartCircleRadiusMeters
+            color = Color.argb(46, 0, 112, 255)
+            outlineColor = Color.rgb(0, 74, 255)
+            outlineWidth = 5
+            globalZIndex = 1600
+            map = naverMap
+        }
+        naverMap.locationOverlay.apply {
+            isVisible = true
+            position = currentLatLng
+            circleRadius = 45
+            circleColor = Color.argb(44, 0, 112, 255)
+            globalZIndex = 1000
+        }
         desiredMarkerKeys += CurrentMarkerKey
-        val currentMarker = markersByKey.getOrPut(CurrentMarkerKey) { Marker() }
+        val currentMarker = markersByKey.getOrPut(CurrentMarkerKey) {
+            Marker().apply { icon = currentMarkerIcon }
+        }
         currentMarker.apply {
             position = currentLatLng
-            iconTintColor = Color.rgb(0, 74, 255)
-            captionText = "현위치"
-            subCaptionText = "출발점"
+            icon = currentMarkerIcon
+            captionText = "출발점"
+            subCaptionText = "현재 위치"
             captionColor = Color.rgb(0, 52, 196)
             captionHaloColor = Color.WHITE
-            captionTextSize = 14f
-            subCaptionTextSize = 11f
-            zIndex = 10
+            captionTextSize = 17f
+            subCaptionTextSize = 12f
+            width = CurrentMarkerWidth
+            height = CurrentMarkerHeight
+            zIndex = 100
+            globalZIndex = 2000
             setForceShowIcon(true)
             setForceShowCaption(true)
             map = naverMap
         }
         allBoundsPoints += currentLatLng
-        occupiedMarkerPositions += currentLatLng
+    } else {
+        startCircleOverlay.map = null
     }
 
     mapState.nearestStops.forEach { stop ->
@@ -156,6 +195,29 @@ private fun updateRouteAddressMap(
         }
     }
 
+    if (currentLatLng != null) {
+        val nextStop = mapState.nearestStops.firstOrNull()
+        val arrowCoords = nextStop
+            ?.routeCoordsFrom(currentLatLng)
+            .orEmpty()
+        if (arrowCoords.size >= 2) {
+            desiredPathKeys += NextStopArrowPathKey
+            val arrowOverlay = pathOverlaysByKey.getOrPut(NextStopArrowPathKey) { PathOverlay() }
+            arrowOverlay.apply {
+                coords = arrowCoords
+                width = 13
+                outlineWidth = 5
+                color = Color.argb(56, 0, 74, 255)
+                outlineColor = Color.WHITE
+                patternImage = nextStopArrowImage
+                patternInterval = NextStopArrowPatternInterval
+                zIndex = 30
+                map = naverMap
+            }
+            allBoundsPoints += arrowCoords
+        }
+    }
+
     pathOverlaysByKey.removeStaleKeys(desiredPathKeys) { path ->
         path.map = null
     }
@@ -165,17 +227,13 @@ private fun updateRouteAddressMap(
         val pointKey = "point-${point.sourceIndex}"
         desiredMarkerKeys += pointKey
         val latLng = LatLng(point.latitude, point.longitude)
-        val displayLatLng = latLng.withVisualOffsetIfOverlapping(
-            occupied = occupiedMarkerPositions,
-            seed = point.sourceIndex + 1,
-        )
         val overlapsCurrent = currentLatLng
             ?.let { it.distanceMetersTo(latLng) < MarkerOverlapThresholdMeters }
             ?: false
         val nearestStop = nearestStopBySourceIndex[point.sourceIndex]
         val marker = markersByKey.getOrPut(pointKey) { Marker() }
         marker.apply {
-            position = displayLatLng
+            position = latLng
             captionText = buildString {
                 if (nearestStop != null) {
                     append(nearestStop.order)
@@ -193,7 +251,7 @@ private fun updateRouteAddressMap(
             captionHaloColor = Color.WHITE
             captionTextSize = 13f
             subCaptionText = when {
-                overlapsCurrent -> "현위치 근처"
+                overlapsCurrent -> "출발점 근처"
                 nearestStop != null -> "방문 ${nearestStop.order}"
                 else -> ""
             }
@@ -207,15 +265,14 @@ private fun updateRouteAddressMap(
             }
             map = naverMap
         }
-        occupiedMarkerPositions += displayLatLng
-        allBoundsPoints += displayLatLng
+        allBoundsPoints += latLng
     }
 
     markersByKey.removeStaleKeys(desiredMarkerKeys) { marker ->
         marker.map = null
     }
 
-    val cameraSignature = mapState.cameraSignature()
+    val cameraSignature = mapState.cameraSignature(currentLatLng)
     if (cameraSignature != lastCameraSignature.value) {
         if (!userInteracting) {
             when {
@@ -283,11 +340,17 @@ private fun RouteAddressMapUiState.currentLatLng(): LatLng? {
     return LatLng(latitude, longitude)
 }
 
-private fun RouteAddressMapUiState.cameraSignature(): String =
+private fun RouteAddressNearestStopUiModel.routeCoordsFrom(currentLatLng: LatLng): List<LatLng> {
+    val routeCoords = routePath.map { LatLng(it.latitude, it.longitude) }
+    return routeCoords.takeIf { it.size >= 2 }
+        ?: listOf(currentLatLng, LatLng(latitude, longitude))
+}
+
+private fun RouteAddressMapUiState.cameraSignature(startLatLng: LatLng?): String =
     buildString {
-        append(currentLatitude?.roundForCameraSignature())
+        append(startLatLng?.latitude?.roundForCameraSignature())
         append(',')
-        append(currentLongitude?.roundForCameraSignature())
+        append(startLatLng?.longitude?.roundForCameraSignature())
         append('|')
         points.joinTo(this, separator = ";") {
             "${it.sourceIndex}:${it.latitude.roundForCameraSignature()},${it.longitude.roundForCameraSignature()}"
@@ -310,27 +373,17 @@ private fun Double.formatDistanceKm(): String {
 }
 
 private const val CurrentMarkerKey = "current"
-private const val MarkerOverlapThresholdMeters = 30.0
-private const val MarkerVisualOffsetMeters = 55.0
-
-private fun LatLng.withVisualOffsetIfOverlapping(
-    occupied: List<LatLng>,
-    seed: Int,
-): LatLng {
-    if (occupied.none { it.distanceMetersTo(this) < MarkerOverlapThresholdMeters }) {
-        return this
-    }
-    val angle = Math.toRadians(((seed * 67) % 360).toDouble())
-    val distanceMeters = MarkerVisualOffsetMeters + ((seed % 3) * 16.0)
-    val latitudeOffset = (distanceMeters * cos(angle)) / MetersPerLatitudeDegree
-    val longitudeScale = (MetersPerLatitudeDegree * abs(cos(Math.toRadians(latitude))))
-        .coerceAtLeast(MinLongitudeScaleMeters)
-    val longitudeOffset = (distanceMeters * sin(angle)) / longitudeScale
-    return LatLng(
-        latitude + latitudeOffset,
-        longitude + longitudeOffset,
-    )
-}
+private const val NextStopArrowPathKey = "next-stop-arrow"
+private const val CurrentMarkerWidth = 118
+private const val CurrentMarkerHeight = 150
+private const val NextStopArrowPatternWidth = 64
+private const val NextStopArrowPatternHeight = 24
+private const val NextStopArrowPatternInterval = 54
+private const val StartCircleRadiusMeters = 650.0
+private const val MapContentPaddingHorizontal = 32
+private const val MapContentPaddingTop = 430
+private const val MapContentPaddingBottom = 620
+private const val MarkerOverlapThresholdMeters = 800.0
 
 private fun LatLng.distanceMetersTo(other: LatLng): Double {
     val earthRadiusMeters = 6_371_000.0
@@ -346,5 +399,57 @@ private fun LatLng.distanceMetersTo(other: LatLng): Double {
     return earthRadiusMeters * c
 }
 
-private const val MetersPerLatitudeDegree = 111_320.0
-private const val MinLongitudeScaleMeters = 20_000.0
+private fun startMarkerIcon(): OverlayImage {
+    val bitmap = Bitmap.createBitmap(CurrentMarkerWidth, CurrentMarkerHeight, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.rgb(0, 74, 255)
+    }
+    val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 6f
+        color = Color.WHITE
+    }
+    val point = Path().apply {
+        moveTo(CurrentMarkerWidth / 2f, CurrentMarkerHeight - 6f)
+        lineTo(CurrentMarkerWidth * 0.22f, CurrentMarkerHeight * 0.56f)
+        lineTo(CurrentMarkerWidth * 0.78f, CurrentMarkerHeight * 0.56f)
+        close()
+    }
+    canvas.drawPath(point, fill)
+    canvas.drawPath(point, stroke)
+    canvas.drawCircle(CurrentMarkerWidth / 2f, CurrentMarkerHeight * 0.36f, 32f, fill)
+    canvas.drawCircle(CurrentMarkerWidth / 2f, CurrentMarkerHeight * 0.36f, 32f, stroke)
+    return OverlayImage.fromBitmap(bitmap)
+}
+
+private fun nextStopArrowPatternImage(): OverlayImage {
+    val bitmap = Bitmap.createBitmap(
+        NextStopArrowPatternWidth,
+        NextStopArrowPatternHeight,
+        Bitmap.Config.ARGB_8888,
+    )
+    val canvas = Canvas(bitmap)
+    val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.rgb(0, 74, 255)
+    }
+    val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
+        color = Color.WHITE
+    }
+
+    canvas.drawCircle(9f, NextStopArrowPatternHeight / 2f, 4.5f, fill)
+    canvas.drawCircle(24f, NextStopArrowPatternHeight / 2f, 4.5f, fill)
+    val arrow = Path().apply {
+        moveTo(39f, 5f)
+        lineTo(57f, NextStopArrowPatternHeight / 2f)
+        lineTo(39f, NextStopArrowPatternHeight - 5f)
+        close()
+    }
+    canvas.drawPath(arrow, fill)
+    canvas.drawPath(arrow, halo)
+    return OverlayImage.fromBitmap(bitmap)
+}

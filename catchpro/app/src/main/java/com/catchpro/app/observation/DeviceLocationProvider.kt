@@ -5,8 +5,16 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Build
+import android.os.CancellationSignal
+import android.os.Looper
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.Executor
+import kotlin.coroutines.resume
 
 class DeviceLocationProvider(
     private val context: Context,
@@ -59,8 +67,80 @@ class DeviceLocationProvider(
         )
     }
 
+    @SuppressLint("MissingPermission")
+    suspend fun currentOrLastKnownLocation(): DeviceLocationResult {
+        val lastKnown = lastKnownLocation()
+        if (!hasLocationPermission(context)) {
+            return lastKnown
+        }
+
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val freshLocation = locationManager.currentLocationFromEnabledProviders()
+            ?.takeIf { it.latitude != 0.0 || it.longitude != 0.0 }
+
+        return freshLocation?.let { location ->
+            DeviceLocationResult(
+                location = DeviceLocation(
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    accuracyMeters = location.accuracy.takeIf { location.hasAccuracy() },
+                    capturedAtMillis = location.time.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                ),
+                failureReason = null,
+            )
+        } ?: lastKnown
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun LocationManager.awaitCurrentLocation(provider: String): Location? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            suspendCancellableCoroutine { continuation ->
+                val cancellationSignal = CancellationSignal()
+                getCurrentLocation(
+                    provider,
+                    cancellationSignal,
+                    DirectExecutor,
+                ) { location ->
+                    if (continuation.isActive) continuation.resume(location)
+                }
+                continuation.invokeOnCancellation { cancellationSignal.cancel() }
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            suspendCancellableCoroutine { continuation ->
+                val listener = object : LocationListener {
+                    override fun onLocationChanged(location: Location) {
+                        removeUpdates(this)
+                        if (continuation.isActive) continuation.resume(location)
+                    }
+                }
+                requestSingleUpdate(provider, listener, Looper.getMainLooper())
+                continuation.invokeOnCancellation { removeUpdates(listener) }
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun LocationManager.currentLocationFromEnabledProviders(): Location? {
+        return enabledProvidersForCurrentRequest()
+            .firstNotNullOfOrNull { provider ->
+                withTimeoutOrNull(CurrentLocationTimeoutMillis) {
+                    awaitCurrentLocation(provider)
+                }?.takeIf { it.latitude != 0.0 || it.longitude != 0.0 }
+            }
+    }
+
+    private fun LocationManager.enabledProvidersForCurrentRequest(): List<String> {
+        return listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+            .filter { provider ->
+                runCatching { isProviderEnabled(provider) }.getOrDefault(false)
+            }
+    }
+
     companion object {
         private const val MaxLocationAgeMillis = 10 * 60 * 1000L
+        private const val CurrentLocationTimeoutMillis = 2500L
+        private val DirectExecutor = Executor { command -> command.run() }
 
         fun hasLocationPermission(context: Context): Boolean {
             return ContextCompat.checkSelfPermission(

@@ -14,7 +14,7 @@ data class AppSettings(
     val observationPackageFilters: String = "",
     val activeDriveDestinationText: String = "",
     val tmapManualRouteAddressesText: String = "",
-    val routeAddressCloudSyncEnabled: Boolean = false,
+    val routeAddressCloudSyncEnabled: Boolean = true,
     val routeAddressCloudSyncRoomCode: String = "250501",
     val routeAddressCloudSyncServerUrl: String = "ws://43.200.8.165/catchpro-sync",
     val primaryAutoConfirmEnabled: Boolean = false,

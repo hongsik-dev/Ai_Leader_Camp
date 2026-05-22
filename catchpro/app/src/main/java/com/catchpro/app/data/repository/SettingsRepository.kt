@@ -46,7 +46,7 @@ class SettingsRepository @Inject constructor(
                 ?.takeIf(String::isOperationalDestinationAddress)
                 .orEmpty(),
             tmapManualRouteAddressesText = normalizedRouteAddresses,
-            routeAddressCloudSyncEnabled = preferences[RouteAddressCloudSyncEnabledKey] ?: false,
+            routeAddressCloudSyncEnabled = preferences[RouteAddressCloudSyncEnabledKey] ?: true,
             routeAddressCloudSyncRoomCode = preferences[RouteAddressCloudSyncRoomCodeKey]
                 ?.sanitizeRouteAddressCloudSyncRoomCode()
                 ?.takeIf { it.length == RouteAddressCloudSyncRoomCodeLength }
@@ -145,7 +145,49 @@ class SettingsRepository @Inject constructor(
     suspend fun setTmapManualRouteAddressesText(value: String) {
         val normalized = value.normalizeManualRouteAddressesText()
         dataStore.edit { preferences ->
+            val slots = normalized.manualRouteAddressSlots()
+            val now = System.currentTimeMillis()
+            val tombstones = preferences[RouteAddressCompletedTombstonesTextKey]
+                .orEmpty()
+                .routeAddressCompletionTombstones(now)
+                .toMutableList()
+            slots.forEachIndexed { index, address ->
+                if (address.isNotBlank()) {
+                    tombstones.removeAll { it.matches(index, address) }
+                }
+            }
             preferences[TmapManualRouteAddressesTextKey] = normalized
+            preferences[RouteAddressCompletedTombstonesTextKey] = tombstones.toRouteAddressCompletionTombstoneText()
+        }
+    }
+
+    suspend fun completeTmapManualRouteAddressSlot(index: Int) {
+        if (index !in 0 until ManualRouteAddressSlotCount) return
+        dataStore.edit { preferences ->
+            val slots = preferences[TmapManualRouteAddressesTextKey]
+                .orEmpty()
+                .manualRouteAddressSlots()
+                .toMutableList()
+            val completedAddress = slots.getOrNull(index).orEmpty()
+            slots[index] = ""
+            val now = System.currentTimeMillis()
+            val tombstones = preferences[RouteAddressCompletedTombstonesTextKey]
+                .orEmpty()
+                .routeAddressCompletionTombstones(now)
+                .toMutableList()
+                .apply { addOrRefreshRouteAddressCompletion(index, completedAddress, now) }
+            preferences[TmapManualRouteAddressesTextKey] = slots
+                .joinToString("\n")
+                .normalizeManualRouteAddressesText()
+            preferences[RouteAddressCompletedTombstonesTextKey] = tombstones.toRouteAddressCompletionTombstoneText()
+
+            val activeDestination = preferences[ActiveDriveDestinationTextKey].orEmpty()
+            if (
+                completedAddress.isNotBlank() &&
+                activeDestination.normalizeRouteAddressKey() == completedAddress.normalizeRouteAddressKey()
+            ) {
+                preferences[ActiveDriveDestinationTextKey] = ""
+            }
         }
     }
 
@@ -155,20 +197,69 @@ class SettingsRepository @Inject constructor(
             ?: return false
         val normalized = slots.joinToString("\n").normalizeManualRouteAddressesText()
         dataStore.edit { preferences ->
+            val now = System.currentTimeMillis()
+            val tombstones = preferences[RouteAddressCompletedTombstonesTextKey]
+                .orEmpty()
+                .routeAddressCompletionTombstones(now)
+                .toMutableList()
+            normalized.manualRouteAddressSlots().forEachIndexed { index, address ->
+                if (address.isNotBlank()) {
+                    tombstones.removeAll { it.matches(index, address) }
+                }
+            }
             preferences[TmapManualRouteAddressesTextKey] = normalized
+            preferences[RouteAddressCompletedTombstonesTextKey] = tombstones.toRouteAddressCompletionTombstoneText()
         }
         return true
     }
 
+    @Suppress("UNUSED_PARAMETER")
     suspend fun applyRouteAddressCloudSync(
         addresses: List<String>,
         activeDriveDestination: String,
+        remoteUpdatedAtMillis: Long = 0L,
     ) {
-        val normalized = addresses.joinToString("\n").normalizeManualRouteAddressesText()
-        val trackingDestination = activeDriveDestination.takeIf(String::isOperationalDestinationAddress)
         dataStore.edit { preferences ->
+            val now = System.currentTimeMillis()
+            val currentSlots = preferences[TmapManualRouteAddressesTextKey]
+                .orEmpty()
+                .manualRouteAddressSlots()
+            val incomingSlots = addresses
+                .joinToString("\n")
+                .manualRouteAddressSlots()
+                .toMutableList()
+            val tombstones = preferences[RouteAddressCompletedTombstonesTextKey]
+                .orEmpty()
+                .routeAddressCompletionTombstones(now)
+                .toMutableList()
+
+            incomingSlots.indices.forEach { index ->
+                val currentAddress = currentSlots.getOrNull(index).orEmpty()
+                val incomingAddress = incomingSlots[index]
+                if (currentAddress.isNotBlank() && incomingAddress.isBlank()) {
+                    tombstones.addOrRefreshRouteAddressCompletion(index, currentAddress, now)
+                }
+            }
+            incomingSlots.indices.forEach { index ->
+                val incomingAddress = incomingSlots[index]
+                if (
+                    incomingAddress.isNotBlank() &&
+                    tombstones.any { it.matches(index, incomingAddress) }
+                ) {
+                    incomingSlots[index] = ""
+                }
+            }
+
+            val normalized = incomingSlots.joinToString("\n").normalizeManualRouteAddressesText()
+            val trackingDestination = activeDriveDestination
+                .takeIf(String::isOperationalDestinationAddress)
+                ?.takeUnless { destination ->
+                    tombstones.any { it.matchesAddress(destination) } ||
+                        incomingSlots.none { it.normalizeRouteAddressKey() == destination.normalizeRouteAddressKey() }
+                }
             preferences[TmapManualRouteAddressesTextKey] = normalized
             preferences[ActiveDriveDestinationTextKey] = trackingDestination.orEmpty()
+            preferences[RouteAddressCompletedTombstonesTextKey] = tombstones.toRouteAddressCompletionTombstoneText()
         }
     }
 
@@ -201,8 +292,15 @@ class SettingsRepository @Inject constructor(
                     .takeIf { it >= 0 }
                 ?: ManualRouteAddressSlotCount - 1
             slots[targetIndex] = address
+            val now = System.currentTimeMillis()
+            val tombstones = preferences[RouteAddressCompletedTombstonesTextKey]
+                .orEmpty()
+                .routeAddressCompletionTombstones(now)
+                .toMutableList()
+                .apply { removeAll { it.matches(targetIndex, address) } }
             val normalized = slots.joinToString("\n").normalizeManualRouteAddressesText()
             preferences[TmapManualRouteAddressesTextKey] = normalized
+            preferences[RouteAddressCompletedTombstonesTextKey] = tombstones.toRouteAddressCompletionTombstoneText()
             if (updateActiveDriveDestination && address.isOperationalDestinationAddress()) {
                 preferences[ActiveDriveDestinationTextKey] = address
             }
@@ -395,6 +493,7 @@ class SettingsRepository @Inject constructor(
         val AutoConfirmEnabledKey = booleanPreferencesKey("auto_confirm_enabled")
         val ActiveDriveDestinationTextKey = stringPreferencesKey("active_drive_destination_text")
         val TmapManualRouteAddressesTextKey = stringPreferencesKey("tmap_manual_route_addresses_text")
+        val RouteAddressCompletedTombstonesTextKey = stringPreferencesKey("route_address_completed_tombstones_text")
         val RouteAddressCloudSyncEnabledKey = booleanPreferencesKey("route_address_cloud_sync_enabled")
         val RouteAddressCloudSyncRoomCodeKey = stringPreferencesKey("route_address_cloud_sync_room_code")
         val RouteAddressCloudSyncServerUrlKey = stringPreferencesKey("route_address_cloud_sync_server_url")
@@ -493,6 +592,65 @@ class SettingsRepository @Inject constructor(
         const val DefaultOrderTrackingMaxConfirmCountText = "2"
     }
 }
+
+private data class RouteAddressCompletionTombstone(
+    val slotIndex: Int,
+    val completedAtMillis: Long,
+    val addressKey: String,
+) {
+    fun matches(
+        index: Int,
+        address: String,
+    ): Boolean = slotIndex == index && matchesAddress(address)
+
+    fun matchesAddress(address: String): Boolean =
+        addressKey.isNotBlank() && address.normalizeRouteAddressKey() == addressKey
+}
+
+private fun String.routeAddressCompletionTombstones(nowMillis: Long): List<RouteAddressCompletionTombstone> =
+    lineSequence()
+        .mapNotNull { line ->
+            val parts = line.split('\t')
+            val slotIndex = parts.getOrNull(0)?.toIntOrNull() ?: return@mapNotNull null
+            val completedAtMillis = parts.getOrNull(1)?.toLongOrNull() ?: return@mapNotNull null
+            val addressKey = parts.getOrNull(2).orEmpty()
+            RouteAddressCompletionTombstone(
+                slotIndex = slotIndex,
+                completedAtMillis = completedAtMillis,
+                addressKey = addressKey,
+            )
+        }
+        .filter { tombstone ->
+            tombstone.slotIndex in 0 until ManualRouteAddressSlotCount &&
+                tombstone.addressKey.isNotBlank() &&
+                nowMillis - tombstone.completedAtMillis <= RouteAddressCompletionTombstoneTtlMillis
+        }
+        .distinctBy { "${it.slotIndex}:${it.addressKey}" }
+        .toList()
+
+private fun MutableList<RouteAddressCompletionTombstone>.addOrRefreshRouteAddressCompletion(
+    slotIndex: Int,
+    address: String,
+    nowMillis: Long,
+) {
+    val addressKey = address.normalizeRouteAddressKey()
+    if (slotIndex !in 0 until ManualRouteAddressSlotCount || addressKey.isBlank()) return
+    removeAll { it.slotIndex == slotIndex && it.addressKey == addressKey }
+    add(
+        RouteAddressCompletionTombstone(
+            slotIndex = slotIndex,
+            completedAtMillis = nowMillis,
+            addressKey = addressKey,
+        ),
+    )
+}
+
+private fun List<RouteAddressCompletionTombstone>.toRouteAddressCompletionTombstoneText(): String =
+    joinToString("\n") { tombstone ->
+        "${tombstone.slotIndex}\t${tombstone.completedAtMillis}\t${tombstone.addressKey}"
+    }
+
+private const val RouteAddressCompletionTombstoneTtlMillis = 30 * 60 * 1000L
 
 private fun String.normalizeManualRouteAddressesText(): String =
     manualRouteAddressSlots()

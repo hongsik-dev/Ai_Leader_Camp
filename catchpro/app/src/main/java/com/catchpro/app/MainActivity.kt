@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         routeAddressCloudSyncManager.start()
-        handleDebugRouteAddressIntent(intent)
+        handleInsungDebugRouteAddressIntent(intent)
 
         setContent {
             CatchProTheme {
@@ -62,11 +62,11 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleDebugRouteAddressIntent(intent)
+        handleInsungDebugRouteAddressIntent(intent)
     }
 
-    private fun handleDebugRouteAddressIntent(intent: Intent?) {
-        if (!BuildConfig.DEBUG) return
+    private fun handleInsungDebugRouteAddressIntent(intent: Intent?) {
+        if (!BuildConfig.DEBUG || BuildConfig.IS_NAVI_APP) return
         if (intent?.action != DebugSetRouteAddressesAction) return
         val encodedAddresses = intent.getStringExtra(DebugRouteAddressesExtra).orEmpty()
         val addresses = runCatching {
@@ -74,6 +74,7 @@ class MainActivity : ComponentActivity() {
         }.getOrNull()?.trim().orEmpty()
         if (addresses.isBlank()) return
         lifecycleScope.launch {
+            settingsRepository.setRouteAddressCloudSyncEnabled(true)
             settingsRepository.setTmapManualRouteAddressesText(addresses)
         }
     }

@@ -331,10 +331,27 @@ class RouteAddressCloudSyncManager @Inject constructor(
                 val activeDriveDestination = payload.optString("activeDriveDestination").orEmpty()
                 val snapshotKey = cloudSnapshotKey(addresses, activeDriveDestination)
                 if (snapshotKey == lastSentSnapshotKey) return
+                if (
+                    updatedAt > 0L &&
+                    updatedAt < maxOf(lastLocalSnapshotSentAtMillis, lastRemoteSnapshotAppliedAtMillis)
+                ) {
+                    logCloudSync(
+                        status = "SNAPSHOT_IGNORED_STALE",
+                        roomCode = roomCode,
+                        rawContext = JSONObject()
+                            .put("addresses", JSONArray(addresses))
+                            .put("activeDriveDestination", activeDriveDestination)
+                            .put("updatedAt", updatedAt)
+                            .put("lastLocalSnapshotSentAtMillis", lastLocalSnapshotSentAtMillis)
+                            .put("lastRemoteSnapshotAppliedAtMillis", lastRemoteSnapshotAppliedAtMillis),
+                    )
+                    return
+                }
+                val previousAddresses = lastAcceptedRemoteAddresses.ifEmpty {
+                    latestSettings.routeAddressCloudSyncAddresses()
+                }
                 val partialReason = partialRemoteSnapshotReason(
-                    previousAddresses = lastAcceptedRemoteAddresses.ifEmpty {
-                        latestSettings.routeAddressCloudSyncAddresses()
-                    },
+                    previousAddresses = previousAddresses,
                     previousActiveDriveDestination = lastAcceptedRemoteActiveDriveDestination.ifBlank {
                         latestSettings.activeDriveDestinationText
                     },
@@ -353,22 +370,7 @@ class RouteAddressCloudSyncManager @Inject constructor(
                     )
                     return
                 }
-                if (
-                    updatedAt > 0L &&
-                    updatedAt < maxOf(lastLocalSnapshotSentAtMillis, lastRemoteSnapshotAppliedAtMillis)
-                ) {
-                    logCloudSync(
-                        status = "SNAPSHOT_IGNORED_STALE",
-                        roomCode = roomCode,
-                        rawContext = JSONObject()
-                            .put("addresses", JSONArray(addresses))
-                            .put("activeDriveDestination", activeDriveDestination)
-                            .put("updatedAt", updatedAt)
-                            .put("lastLocalSnapshotSentAtMillis", lastLocalSnapshotSentAtMillis)
-                            .put("lastRemoteSnapshotAppliedAtMillis", lastRemoteSnapshotAppliedAtMillis),
-                    )
-                    return
-                }
+                val clearedSlotCount = clearedAddressSlotCount(previousAddresses, addresses)
                 suppressNextLocalSnapshotKey = snapshotKey
                 if (updatedAt > 0L) {
                     lastRemoteSnapshotAppliedAtMillis = updatedAt
@@ -379,6 +381,7 @@ class RouteAddressCloudSyncManager @Inject constructor(
                     settingsRepository.applyRouteAddressCloudSync(
                         addresses = addresses,
                         activeDriveDestination = activeDriveDestination,
+                        remoteUpdatedAtMillis = updatedAt,
                     )
                 }
                 logCloudSync(
@@ -387,7 +390,8 @@ class RouteAddressCloudSyncManager @Inject constructor(
                     rawContext = JSONObject()
                         .put("addresses", JSONArray(addresses))
                         .put("activeDriveDestination", activeDriveDestination)
-                        .put("updatedAt", updatedAt),
+                        .put("updatedAt", updatedAt)
+                        .put("clearedSlotCount", clearedSlotCount),
                 )
                 _status.update {
                     it.copy(
@@ -585,19 +589,6 @@ private fun partialRemoteSnapshotReason(
 ): String? {
     val previousSlots = previousAddresses.padCloudAddressSlots()
     val incomingSlots = incomingAddresses.padCloudAddressSlots()
-    val previousFilledCount = previousSlots.count(String::isNotBlank)
-    val incomingFilledCount = incomingSlots.count(String::isNotBlank)
-    if (previousFilledCount > 0 && incomingFilledCount == 0) {
-        return "빈 스냅샷 덮어쓰기 차단: 이전 주소 ${previousFilledCount}칸 보유"
-    }
-    if (incomingFilledCount < previousFilledCount) {
-        val clearedSlots = incomingSlots.indices.count { index ->
-            previousSlots.getOrNull(index).orEmpty().isNotBlank() && incomingSlots[index].isBlank()
-        }
-        if (clearedSlots > 0) {
-            return "부분 스냅샷 덮어쓰기 차단: 이전 ${previousFilledCount}칸, 수신 ${incomingFilledCount}칸"
-        }
-    }
     for (index in incomingSlots.indices) {
         partialRemoteFieldReason(
             label = "주소${index + 1}",
@@ -610,6 +601,17 @@ private fun partialRemoteSnapshotReason(
         previous = previousActiveDriveDestination,
         incoming = incomingActiveDriveDestination,
     )
+}
+
+private fun clearedAddressSlotCount(
+    previousAddresses: List<String>,
+    incomingAddresses: List<String>,
+): Int {
+    val previousSlots = previousAddresses.padCloudAddressSlots()
+    val incomingSlots = incomingAddresses.padCloudAddressSlots()
+    return incomingSlots.indices.count { index ->
+        previousSlots.getOrNull(index).orEmpty().isNotBlank() && incomingSlots[index].isBlank()
+    }
 }
 
 private fun partialRemoteFieldReason(

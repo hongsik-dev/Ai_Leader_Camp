@@ -82,15 +82,6 @@ fun TmapQueueScreen(
         NaviRouteMapContent(
             uiState = uiState,
             naverMapConfigured = BuildConfig.NAVER_MAP_NCP_KEY_ID.isNotBlank(),
-            locationPermissionGranted = locationPermissionGranted,
-            onRequestLocationPermission = {
-                locationPermissionLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION,
-                    ),
-                )
-            },
             onRefreshMap = {
                 viewModel.refreshAddressMap(context, uiState.manualRouteAddresses)
             },
@@ -107,7 +98,8 @@ fun TmapQueueScreen(
             },
             onCompleteAddress = viewModel::completeManualAddress,
             onCloudEnabledChange = viewModel::setRouteAddressCloudSyncEnabled,
-            onRoomCodeChange = viewModel::setRouteAddressCloudSyncRoomCode,
+            onAdminAreaQueryChange = viewModel::updateAdminAreaQueryText,
+            onResolveAdminAreaDistance = viewModel::resolveAdminAreaDistance,
         )
         return
     }
@@ -124,6 +116,7 @@ fun TmapQueueScreen(
                 mapPoints = uiState.routeAddressMap.points,
                 isOptimizing = uiState.isOptimizing,
                 locationPermissionGranted = locationPermissionGranted,
+                routeManagementEnabled = false,
                 onAddressChange = { index, value ->
                     viewModel.updateManualAddress(index, value)
                 },
@@ -142,7 +135,6 @@ fun TmapQueueScreen(
                 onTmapNavigate = { address ->
                     TmapNavigator.launchForAddress(context, address)
                 },
-                onCompleteAddress = viewModel::completeManualAddress,
                 onOptimizeRoute = {
                     if (DeviceLocationProvider.hasLocationPermission(context)) {
                         viewModel.optimizeRoute(context, uiState.manualRouteAddresses)
@@ -196,16 +188,20 @@ fun TmapQueueScreen(
 private fun NaviRouteMapContent(
     uiState: TmapQueueUiState,
     naverMapConfigured: Boolean,
-    locationPermissionGranted: Boolean,
-    onRequestLocationPermission: () -> Unit,
     onRefreshMap: () -> Unit,
     onNaverNavigate: (RouteAddressMapPointUiModel) -> Unit,
     onTmapNavigate: (String) -> Unit,
     onCompleteAddress: (Int) -> Unit,
     onCloudEnabledChange: (Boolean) -> Unit,
-    onRoomCodeChange: (String) -> Unit,
+    onAdminAreaQueryChange: (String) -> Unit,
+    onResolveAdminAreaDistance: () -> Unit,
 ) {
     var selectedPoint by remember { mutableStateOf<RouteAddressMapPointUiModel?>(null) }
+    LaunchedEffect(uiState.routeAddressCloudSyncEnabled) {
+        if (!uiState.routeAddressCloudSyncEnabled) {
+            onCloudEnabledChange(true)
+        }
+    }
     LaunchedEffect(uiState.routeAddressMap.points) {
         selectedPoint = selectedPoint?.let { selected ->
             uiState.routeAddressMap.points.firstOrNull {
@@ -237,21 +233,25 @@ private fun NaviRouteMapContent(
             }
         }
 
-        NaviMapStatusPanel(
-            enabled = uiState.routeAddressCloudSyncEnabled,
-            roomCode = uiState.routeAddressCloudSyncRoomCode,
-            status = uiState.routeAddressCloudSyncStatus,
+        NaviMapRefreshButton(
             isRefreshing = uiState.isRefreshingMap,
-            locationPermissionGranted = locationPermissionGranted,
-            onEnabledChange = onCloudEnabledChange,
-            onRoomCodeChange = onRoomCodeChange,
             onRefreshMap = onRefreshMap,
-            onRequestLocationPermission = onRequestLocationPermission,
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
+                .align(Alignment.TopEnd)
                 .statusBarsPadding()
-                .padding(10.dp),
+                .padding(8.dp),
+        )
+
+        NaviAdminAreaDistancePanel(
+            query = uiState.adminAreaQueryText,
+            isResolving = uiState.isResolvingAdminAreaDistance,
+            result = uiState.adminAreaDistanceResult,
+            onQueryChange = onAdminAreaQueryChange,
+            onResolve = onResolveAdminAreaDistance,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(start = 8.dp, top = 8.dp, end = 92.dp),
         )
 
         selectedPoint?.let { point ->
@@ -269,92 +269,119 @@ private fun NaviRouteMapContent(
                     .navigationBarsPadding()
                     .padding(10.dp),
             )
-        } ?: NaviRouteOrderPanel(
-            mapState = uiState.routeAddressMap,
-            onSelectPoint = { selectedPoint = it },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(10.dp),
-        )
+        }
     }
 }
 
 @Composable
-private fun NaviMapStatusPanel(
-    enabled: Boolean,
-    roomCode: String,
-    status: RouteAddressCloudSyncStatus,
-    isRefreshing: Boolean,
-    locationPermissionGranted: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-    onRoomCodeChange: (String) -> Unit,
-    onRefreshMap: () -> Unit,
-    onRequestLocationPermission: () -> Unit,
+private fun NaviAdminAreaDistancePanel(
+    query: String,
+    isResolving: Boolean,
+    result: AdminAreaDistanceResultUiModel?,
+    onQueryChange: (String) -> Unit,
+    onResolve: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(modifier = modifier) {
+    Card(modifier = modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "CatchPro Navi",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = if (status.connected) {
-                            "AWS 연결됨 · 방 ${status.roomCode}"
-                        } else {
-                            status.message
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = onEnabledChange,
-                )
-            }
-            if (!enabled) {
                 OutlinedTextField(
-                    value = roomCode,
-                    onValueChange = onRoomCodeChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("동기화 방 코드") },
+                    value = query,
+                    onValueChange = onQueryChange,
+                    modifier = Modifier.weight(1f),
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    label = { Text("행정동") },
+                    placeholder = { Text("인계동") },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        keyboardType = KeyboardType.Text,
+                    ),
                 )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedButton(
-                    onClick = onRefreshMap,
-                    enabled = !isRefreshing,
-                    modifier = Modifier.weight(1f),
+                Button(
+                    onClick = onResolve,
+                    enabled = !isResolving,
+                    modifier = Modifier.height(48.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                 ) {
-                    Text(if (isRefreshing) "갱신 중" else "지도 갱신")
+                    Text(if (isResolving) "확인중" else "확인")
                 }
-                OutlinedButton(
-                    onClick = onRequestLocationPermission,
-                    enabled = !locationPermissionGranted,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(if (locationPermissionGranted) "위치 허용됨" else "위치 권한")
+            }
+
+            result?.let { distanceResult ->
+                val nearest = distanceResult.nearest
+                Text(
+                    text = when {
+                        nearest != null -> buildString {
+                            append("사용자 위치 기준 방문순서")
+                            append(" · ")
+                            append(distanceResult.query)
+                            append(" 참고거리")
+                        }
+
+                        distanceResult.message != null -> distanceResult.message
+                        else -> "거리 확인 결과가 없습니다."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (nearest != null) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                )
+                if (nearest != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        distanceResult.candidates.take(4).forEachIndexed { orderIndex, candidate ->
+                            Text(
+                                text = buildString {
+                                    append(orderIndex + 1)
+                                    append("방문 · 주소 ")
+                                    append(candidate.sourceIndex + 1)
+                                    append(" · 행정동 직선 ")
+                                    append(candidate.distanceKm.formatDistanceKm())
+                                    append("km")
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (distanceResult.resolvedQuery != distanceResult.query) {
+                        Text(
+                            text = "기준: ${distanceResult.resolvedQuery}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NaviMapRefreshButton(
+    isRefreshing: Boolean,
+    onRefreshMap: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedButton(
+        onClick = onRefreshMap,
+        enabled = !isRefreshing,
+        modifier = modifier.height(36.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+    ) {
+        Text(
+            text = if (isRefreshing) "갱신 중" else "지도 갱신",
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }
 
@@ -397,7 +424,7 @@ private fun NaviSelectedAddressPanel(
                     }
                     if (isBlank()) {
                         point.distanceKmFromCurrentLocation?.let {
-                            append("현위치 직선 ")
+                            append("출발점 직선 ")
                             append(it.formatDistanceKm())
                             append("km")
                         }
@@ -452,14 +479,35 @@ private fun NaviRouteOrderPanel(
             Text(
                 text = if (mapState.nearestStops.isNotEmpty()) {
                     buildString {
-                        append("방문순서: 현위치 → ")
+                        append("방문순서: 출발점 → ")
                         append(mapState.nearestStops.joinToString(" → ") { (it.sourceIndex + 1).toString() })
                     }
                 } else {
-                    "동기화된 주소를 기다리는 중"
+                    "방문순서: 출발점 확인 중"
                 },
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = buildString {
+                    append("출발점: ")
+                    if (mapState.currentLatitude != null && mapState.currentLongitude != null) {
+                        append("현재 위치 표시 중")
+                        mapState.currentAccuracyMeters?.let {
+                            append(" · GPS ±")
+                            append(it.toInt())
+                            append("m")
+                        }
+                    } else {
+                        append(mapState.message ?: "현재 위치를 가져오는 중입니다")
+                    }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (mapState.currentLatitude != null && mapState.currentLongitude != null) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
             )
             mapState.nearestTotalDistanceKm?.let { totalDistance ->
                 Text(
@@ -592,7 +640,7 @@ private fun NearestNaverRouteSummary(
             Text(
                 text = buildString {
                     append("거리순: ")
-                    append("현위치 → ")
+                    append("출발점 → ")
                     append(
                         mapState.nearestStops.joinToString(" → ") {
                             (it.sourceIndex + 1).toString()
@@ -629,7 +677,7 @@ private fun NearestNaverRouteSummary(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        val fromLabel = if (to.order == 1) "현위치" else to.fromLabel
+                        val fromLabel = if (to.order == 1) "출발점" else to.fromLabel
                         Text(
                             text = buildString {
                                 append("주소 ")
@@ -784,10 +832,11 @@ private fun ManualRoutePlannerCard(
     mapPoints: List<RouteAddressMapPointUiModel>,
     isOptimizing: Boolean,
     locationPermissionGranted: Boolean,
+    routeManagementEnabled: Boolean,
     onAddressChange: (Int, String) -> Unit,
     onNaverNavigate: (String, RouteAddressMapPointUiModel?) -> Unit,
     onTmapNavigate: (String) -> Unit,
-    onCompleteAddress: (Int) -> Unit,
+    onCompleteAddress: ((Int) -> Unit)? = null,
     onOptimizeRoute: () -> Unit,
     onClear: () -> Unit,
 ) {
@@ -822,7 +871,9 @@ private fun ManualRoutePlannerCard(
                         )
                     },
                     onTmapNavigate = { onTmapNavigate(address) },
-                    onComplete = { onCompleteAddress(index) },
+                    onComplete = onCompleteAddress
+                        ?.takeIf { routeManagementEnabled }
+                        ?.let { complete -> { complete(index) } },
                 )
             }
             Text(
@@ -836,17 +887,24 @@ private fun ManualRoutePlannerCard(
             )
             Button(
                 onClick = onOptimizeRoute,
-                enabled = filledAddressCount >= 1 && !isOptimizing,
+                enabled = routeManagementEnabled && filledAddressCount >= 1 && !isOptimizing,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (isOptimizing) "계산 중..." else "최적 순서 계산")
             }
             OutlinedButton(
                 onClick = onClear,
-                enabled = addresses.any { it.isNotBlank() },
+                enabled = routeManagementEnabled && addresses.any { it.isNotBlank() },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("주소 초기화")
+            }
+            if (!routeManagementEnabled) {
+                Text(
+                    text = "방문 완료와 주소 초기화는 CatchPro Navi에서 처리하면 이 화면에도 자동 반영됩니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -860,7 +918,7 @@ private fun ManualAddressBlock(
     onAddressChange: (String) -> Unit,
     onNaverNavigate: () -> Unit,
     onTmapNavigate: () -> Unit,
-    onComplete: () -> Unit,
+    onComplete: (() -> Unit)?,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
@@ -890,8 +948,8 @@ private fun ManualAddressBlock(
                 Text("TMAP")
             }
             OutlinedButton(
-                onClick = onComplete,
-                enabled = address.isNotBlank(),
+                onClick = { onComplete?.invoke() },
+                enabled = address.isNotBlank() && onComplete != null,
                 modifier = Modifier.weight(1f),
             ) {
                 Text("완료")
