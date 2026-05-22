@@ -239,8 +239,18 @@ class TmapQueueViewModel(
         }
     }
 
-    fun resolveAdminAreaDistance() {
-        val query = _uiState.value.adminAreaQueryText.trim()
+    fun resolveAdminAreaDistance(queryOverride: String? = null) {
+        val query = queryOverride?.trim().orEmpty().ifBlank {
+            _uiState.value.adminAreaQueryText.trim()
+        }
+        if (queryOverride != null) {
+            _uiState.update {
+                it.copy(
+                    adminAreaQueryText = query,
+                    adminAreaDistanceResult = null,
+                )
+            }
+        }
         adminAreaDistanceJob?.cancel()
         adminAreaDistanceJob = viewModelScope.launch {
             val points = _uiState.value.routeAddressMap.points

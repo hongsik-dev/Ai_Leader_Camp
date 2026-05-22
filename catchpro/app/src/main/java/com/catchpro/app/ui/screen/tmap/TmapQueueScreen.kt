@@ -1,6 +1,12 @@
 package com.catchpro.app.ui.screen.tmap
 
 import android.Manifest
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.speech.RecognizerIntent
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +24,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -36,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.catchpro.app.BuildConfig
@@ -99,7 +110,8 @@ fun TmapQueueScreen(
             onCompleteAddress = viewModel::completeManualAddress,
             onCloudEnabledChange = viewModel::setRouteAddressCloudSyncEnabled,
             onAdminAreaQueryChange = viewModel::updateAdminAreaQueryText,
-            onResolveAdminAreaDistance = viewModel::resolveAdminAreaDistance,
+            onResolveAdminAreaDistance = { viewModel.resolveAdminAreaDistance() },
+            onResolveAdminAreaVoiceQuery = { query -> viewModel.resolveAdminAreaDistance(query) },
         )
         return
     }
@@ -195,8 +207,57 @@ private fun NaviRouteMapContent(
     onCloudEnabledChange: (Boolean) -> Unit,
     onAdminAreaQueryChange: (String) -> Unit,
     onResolveAdminAreaDistance: () -> Unit,
+    onResolveAdminAreaVoiceQuery: (String) -> Unit,
 ) {
+    val context = LocalContext.current
     var selectedPoint by remember { mutableStateOf<RouteAddressMapPointUiModel?>(null) }
+    var launchVoiceAfterPermission by remember { mutableStateOf(false) }
+    val voiceRecognizerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val spoken = result.data
+            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            ?.firstOrNull()
+            ?.normalizeSpokenAdminAreaQuery()
+            .orEmpty()
+        if (spoken.isNotBlank()) {
+            onResolveAdminAreaVoiceQuery(spoken)
+        }
+    }
+    fun launchVoiceRecognizer() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.KOREAN.toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "행정동을 말해 주세요")
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+        }
+        try {
+            voiceRecognizerLauncher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(context, "이 휴대폰에서 음성 인식을 실행할 수 없습니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted && launchVoiceAfterPermission) {
+            launchVoiceAfterPermission = false
+            launchVoiceRecognizer()
+        } else if (!granted) {
+            launchVoiceAfterPermission = false
+            Toast.makeText(context, "마이크 권한을 허용해야 행정동 음성입력을 사용할 수 있습니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
+    fun requestAdminAreaVoiceInput() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            launchVoiceRecognizer()
+        } else {
+            launchVoiceAfterPermission = true
+            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     LaunchedEffect(uiState.routeAddressCloudSyncEnabled) {
         if (!uiState.routeAddressCloudSyncEnabled) {
             onCloudEnabledChange(true)
@@ -248,6 +309,7 @@ private fun NaviRouteMapContent(
             result = uiState.adminAreaDistanceResult,
             onQueryChange = onAdminAreaQueryChange,
             onResolve = onResolveAdminAreaDistance,
+            onVoiceInput = ::requestAdminAreaVoiceInput,
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .statusBarsPadding()
@@ -280,6 +342,7 @@ private fun NaviAdminAreaDistancePanel(
     result: AdminAreaDistanceResultUiModel?,
     onQueryChange: (String) -> Unit,
     onResolve: () -> Unit,
+    onVoiceInput: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
@@ -304,6 +367,15 @@ private fun NaviAdminAreaDistancePanel(
                         keyboardType = KeyboardType.Text,
                     ),
                 )
+                IconButton(
+                    onClick = onVoiceInput,
+                    modifier = Modifier.height(48.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Mic,
+                        contentDescription = "행정동 음성 입력",
+                    )
+                }
                 Button(
                     onClick = onResolve,
                     enabled = !isResolving,
@@ -364,6 +436,12 @@ private fun NaviAdminAreaDistancePanel(
             }
         }
     }
+}
+
+private fun String.normalizeSpokenAdminAreaQuery(): String {
+    return trim()
+        .replace(Regex("""\s+"""), " ")
+        .replace(Regex("""([가-힣])\s+(동|읍|면|구|시|군)$"""), "$1$2")
 }
 
 @Composable
