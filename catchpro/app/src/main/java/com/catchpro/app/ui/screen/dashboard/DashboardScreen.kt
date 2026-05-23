@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.catchpro.app.data.region.KoreaAdministrativeAreas
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.catchpro.app.data.repository.SettingsRepository
+import com.catchpro.app.feature.CatchProEdition
 import com.catchpro.app.ui.components.ScreenScaffold
 
 @Composable
@@ -50,6 +51,19 @@ fun DashboardScreen(
 
 @Composable
 private fun DashboardGoalCard() {
+    val firstGoal = when {
+        CatchProEdition.experimentalAutoDetailConfirmAvailable ->
+            "1. 인성 리스트에서 오더가 보이면 자동상세확정으로 빠르게 상세화면 진입"
+        CatchProEdition.autoConfirmAvailable ->
+            "1. 사용자가 인성 리스트에서 직접 연 상세화면을 빠르게 판정"
+        else ->
+            "1. 오더 조건을 저장하고 운행 전 기준을 확인"
+    }
+    val secondGoal = if (CatchProEdition.autoConfirmAvailable) {
+        "2. 도착지 선택과 요금 조건이 맞으면 확인 팝업 없이 즉시 확정"
+    } else {
+        "2. 자동확정은 Pro 또는 개인 운행판에서 사용"
+    }
     Card {
         Column(
             modifier = Modifier
@@ -63,11 +77,11 @@ private fun DashboardGoalCard() {
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "1. 인성 리스트에서 오더가 보이면 자동상세확정으로 빠르게 상세화면 진입",
+                text = firstGoal,
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
-                text = "2. 도착지 선택과 요금 조건이 맞으면 확인 팝업 없이 즉시 확정",
+                text = secondGoal,
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(

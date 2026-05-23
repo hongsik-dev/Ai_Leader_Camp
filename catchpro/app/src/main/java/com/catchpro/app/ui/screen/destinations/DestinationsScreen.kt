@@ -59,6 +59,8 @@ fun DestinationsScreen(
                 enabled = uiState.enabled,
                 destinationKeywords = destinationKeywordsDraft,
                 minimumPriceText = minimumPriceDraft,
+                autoConfirmFeatureAvailable = uiState.autoConfirmFeatureAvailable,
+                editionLabel = uiState.editionLabel,
                 onEnabledChange = viewModel::setEnabled,
                 onDestinationKeywordsChange = { destinationKeywordsDraft = it },
                 onMinimumPriceTextChange = { minimumPriceDraft = it },
@@ -73,19 +75,23 @@ fun DestinationsScreen(
                     destinationKeywordsDraft.trim() != uiState.destinationKeywords.trim() ||
                         minimumPriceDraft.trim() != uiState.minimumPriceText.trim(),
             )
-            OrderCaptureBehaviorCard(
-                autoEntryEnabled = uiState.orderListAutoEntryEnabled,
-                maxChecksText = orderListAutoEntryMaxChecksDraft,
-                onAutoEntryEnabledChange = viewModel::setOrderListAutoEntryEnabled,
-                onMaxChecksTextChange = { value ->
-                    orderListAutoEntryMaxChecksDraft = value.filter { it.isDigit() }.take(2)
-                },
-                onSaveMaxChecks = {
-                    viewModel.setOrderListAutoEntryMaxChecksText(orderListAutoEntryMaxChecksDraft)
-                },
-                maxChecksDirty =
-                    orderListAutoEntryMaxChecksDraft.trim() != uiState.orderListAutoEntryMaxChecksText.trim(),
-            )
+            if (uiState.autoDetailFeatureAvailable) {
+                OrderCaptureBehaviorCard(
+                    autoEntryEnabled = uiState.orderListAutoEntryEnabled,
+                    maxChecksText = orderListAutoEntryMaxChecksDraft,
+                    onAutoEntryEnabledChange = viewModel::setOrderListAutoEntryEnabled,
+                    onMaxChecksTextChange = { value ->
+                        orderListAutoEntryMaxChecksDraft = value.filter { it.isDigit() }.take(2)
+                    },
+                    onSaveMaxChecks = {
+                        viewModel.setOrderListAutoEntryMaxChecksText(orderListAutoEntryMaxChecksDraft)
+                    },
+                    maxChecksDirty =
+                        orderListAutoEntryMaxChecksDraft.trim() != uiState.orderListAutoEntryMaxChecksText.trim(),
+                )
+            } else {
+                AutoDetailExcludedCard(editionLabel = uiState.editionLabel)
+            }
             PrimaryCoverageGuideCard(destinationKeywords = destinationKeywordsDraft)
         }
     }
@@ -99,6 +105,29 @@ fun DestinationsScreen(
                 showNationwidePicker = false
             },
         )
+    }
+}
+
+@Composable
+private fun AutoDetailExcludedCard(editionLabel: String) {
+    Card {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "확정/상세진입 동작",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "$editionLabel 배포판에서는 자동상세확정을 제외했습니다. 조건 저장과 직접 진입 상세화면의 자동확정만 버전별로 관리합니다.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -194,6 +223,8 @@ private fun PrimaryAutoOrderCard(
     enabled: Boolean,
     destinationKeywords: String,
     minimumPriceText: String,
+    autoConfirmFeatureAvailable: Boolean,
+    editionLabel: String,
     onEnabledChange: (Boolean) -> Unit,
     onDestinationKeywordsChange: (String) -> Unit,
     onMinimumPriceTextChange: (String) -> Unit,
@@ -225,7 +256,11 @@ private fun PrimaryAutoOrderCard(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "도착지 선택과 요금 조건만 만족하면 확정 대상으로 봅니다.",
+                        text = if (autoConfirmFeatureAvailable) {
+                            "도착지 선택과 요금 조건만 만족하면 확정 대상으로 봅니다."
+                        } else {
+                            "$editionLabel 에서는 조건만 저장하고 자동확정은 Pro에서 사용할 수 있습니다."
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -233,6 +268,7 @@ private fun PrimaryAutoOrderCard(
                 Switch(
                     checked = enabled,
                     onCheckedChange = onEnabledChange,
+                    enabled = autoConfirmFeatureAvailable,
                 )
             }
             OutlinedTextField(

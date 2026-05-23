@@ -3,6 +3,7 @@ package com.catchpro.app.ui.screen.destinations
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.catchpro.app.feature.CatchProEdition
 import com.catchpro.app.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,9 @@ data class DestinationsUiState(
     val orderListAutoEntryMaxChecksText: String = "30",
     val destinationKeywords: String = "",
     val minimumPriceText: String = "",
+    val autoConfirmFeatureAvailable: Boolean = CatchProEdition.autoConfirmAvailable,
+    val autoDetailFeatureAvailable: Boolean = CatchProEdition.experimentalAutoDetailConfirmAvailable,
+    val editionLabel: String = CatchProEdition.label,
 )
 
 class DestinationsViewModel(
@@ -29,6 +33,9 @@ class DestinationsViewModel(
                 orderListAutoEntryMaxChecksText = settings.orderListAutoEntryMaxChecksText,
                 destinationKeywords = settings.primaryDestinationKeywords,
                 minimumPriceText = settings.primaryMinimumPriceText,
+                autoConfirmFeatureAvailable = CatchProEdition.autoConfirmAvailable,
+                autoDetailFeatureAvailable = CatchProEdition.experimentalAutoDetailConfirmAvailable,
+                editionLabel = CatchProEdition.label,
             )
         }
         .stateIn(
@@ -38,12 +45,14 @@ class DestinationsViewModel(
         )
 
     fun setEnabled(enabled: Boolean) {
+        if (!CatchProEdition.autoConfirmAvailable) return
         viewModelScope.launch {
             settingsRepository.setPrimaryAutoConfirmEnabled(enabled)
         }
     }
 
     fun setOrderListAutoEntryEnabled(enabled: Boolean) {
+        if (!CatchProEdition.experimentalAutoDetailConfirmAvailable) return
         viewModelScope.launch {
             settingsRepository.setPrimaryOrderListAutoEntryEnabled(enabled)
         }
@@ -60,7 +69,9 @@ class DestinationsViewModel(
         minimumPriceText: String,
     ) {
         viewModelScope.launch {
-            settingsRepository.setPrimaryAutoConfirmEnabled(true)
+            if (CatchProEdition.autoConfirmAvailable) {
+                settingsRepository.setPrimaryAutoConfirmEnabled(true)
+            }
             settingsRepository.setPrimaryDestinationKeywords(destinationKeywords)
             settingsRepository.setPrimaryMinimumPriceText(minimumPriceText)
         }

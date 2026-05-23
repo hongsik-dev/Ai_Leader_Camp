@@ -224,7 +224,9 @@ class CatchProAccessibilityService : AccessibilityService() {
         val now = System.currentTimeMillis()
         maybeResetPreviousLogsForToday(nowMillis = now, force = true)
         scheduleNextDailyLogReset(now)
-        routeAddressCloudSyncManager.start()
+        if (BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC) {
+            routeAddressCloudSyncManager.start()
+        }
         if (settingsJob == null) {
             settingsJob = serviceScope.launch {
                 settingsRepository.settings.collectLatest { settings ->
@@ -2214,6 +2216,9 @@ class CatchProAccessibilityService : AccessibilityService() {
         capturedAtMillis: Long,
         parsedDraftOverride: ParsedOrderDraft? = null,
     ): Boolean {
+        if (!BuildConfig.FEATURE_AUTO_CONFIRM) {
+            return false
+        }
         if (!isSupportedInsungPackage(packageName)) {
             return false
         }
@@ -2388,6 +2393,7 @@ class CatchProAccessibilityService : AccessibilityService() {
     }
 
     private fun currentAutoEntryMode(): AutoEntryMode? {
+        if (!BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM) return null
         if (!activeSettings.primaryOrderListAutoEntryEnabled) return null
         return AutoEntryMode.Primary
     }
@@ -4705,35 +4711,53 @@ class CatchProAccessibilityService : AccessibilityService() {
         }
 
         val overlay = ensureRunModeOverlay()
-        val autoConfirmOn = settings.primaryAutoConfirmEnabled
-        val autoEntryOn = settings.primaryOrderListAutoEntryEnabled
-        val awsSyncOn = settings.routeAddressCloudSyncEnabled
+        val autoConfirmAvailable = BuildConfig.FEATURE_AUTO_CONFIRM
+        val autoEntryAvailable = BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM
+        val awsSyncAvailable = BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC
+        val autoConfirmOn = autoConfirmAvailable && settings.primaryAutoConfirmEnabled
+        val autoEntryOn = autoEntryAvailable && settings.primaryOrderListAutoEntryEnabled
+        val awsSyncOn = awsSyncAvailable && settings.routeAddressCloudSyncEnabled
         val driveModeOn = autoConfirmOn && autoEntryOn
 
         overlay.statusView.visibility = View.GONE
-        overlay.autoConfirmButton.text = "자동확정 ${if (autoConfirmOn) "ON" else "OFF"}"
-        overlay.autoEntryButton.text = "자동상세 ${if (autoEntryOn) "ON" else "OFF"}"
-        overlay.awsButton.text = "AWS ${if (awsSyncOn) "ON" else "OFF"}"
-        overlay.enableDriveModeButton.visibility = if (driveModeOn) View.GONE else View.VISIBLE
+        overlay.autoConfirmButton.isEnabled = autoConfirmAvailable
+        overlay.autoEntryButton.visibility = if (autoEntryAvailable) View.VISIBLE else View.GONE
+        overlay.awsButton.visibility = if (awsSyncAvailable) View.VISIBLE else View.GONE
+        overlay.enableDriveModeButton.visibility = if (autoConfirmAvailable && autoEntryAvailable && !driveModeOn) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
 
-        tintRunModeButton(
-            button = overlay.autoConfirmButton,
-            enabled = autoConfirmOn,
-            onText = "자동확정 ON",
-            offText = "자동확정 OFF",
-        )
-        tintRunModeButton(
-            button = overlay.autoEntryButton,
-            enabled = autoEntryOn,
-            onText = "자동상세 ON",
-            offText = "자동상세 OFF",
-        )
-        tintRunModeButton(
-            button = overlay.awsButton,
-            enabled = awsSyncOn,
-            onText = "AWS ON",
-            offText = "AWS OFF",
-        )
+        if (autoConfirmAvailable) {
+            tintRunModeButton(
+                button = overlay.autoConfirmButton,
+                enabled = autoConfirmOn,
+                onText = "자동확정 ON",
+                offText = "자동확정 OFF",
+            )
+        } else {
+            tintDisabledRunModeButton(
+                button = overlay.autoConfirmButton,
+                text = "자동확정 PRO",
+            )
+        }
+        if (autoEntryAvailable) {
+            tintRunModeButton(
+                button = overlay.autoEntryButton,
+                enabled = autoEntryOn,
+                onText = "자동상세 ON",
+                offText = "자동상세 OFF",
+            )
+        }
+        if (awsSyncAvailable) {
+            tintRunModeButton(
+                button = overlay.awsButton,
+                enabled = awsSyncOn,
+                onText = "AWS ON",
+                offText = "AWS OFF",
+            )
+        }
         overlay.enableDriveModeButton.backgroundTintList = ColorStateList.valueOf(0xFF0EA5E9.toInt())
         overlay.enableDriveModeButton.setTextColor(Color.WHITE)
         overlay.container.visibility = View.VISIBLE
@@ -4748,6 +4772,10 @@ class CatchProAccessibilityService : AccessibilityService() {
             settings.primaryAutoConfirmEnabled,
             settings.primaryOrderListAutoEntryEnabled,
             settings.routeAddressCloudSyncEnabled,
+            BuildConfig.CATCHPRO_EDITION,
+            BuildConfig.FEATURE_AUTO_CONFIRM,
+            BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM,
+            BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC,
         ).joinToString("|")
     }
 
@@ -4777,16 +4805,19 @@ class CatchProAccessibilityService : AccessibilityService() {
             setPadding(0, 0, 0, 0)
         }
         val autoConfirmButton = runModeButton {
+            if (!BuildConfig.FEATURE_AUTO_CONFIRM) return@runModeButton
             serviceScope.launch {
                 settingsRepository.setPrimaryAutoConfirmEnabled(!activeSettings.primaryAutoConfirmEnabled)
             }
         }
         val autoEntryButton = runModeButton {
+            if (!BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM) return@runModeButton
             serviceScope.launch {
                 settingsRepository.setPrimaryOrderListAutoEntryEnabled(!activeSettings.primaryOrderListAutoEntryEnabled)
             }
         }
         val awsButton = runModeButton {
+            if (!BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC) return@runModeButton
             serviceScope.launch {
                 settingsRepository.setRouteAddressCloudSyncEnabled(!activeSettings.routeAddressCloudSyncEnabled)
             }
@@ -4794,6 +4825,9 @@ class CatchProAccessibilityService : AccessibilityService() {
             minWidth = dp(58)
         }
         val enableDriveModeButton = runModeButton {
+            if (!BuildConfig.FEATURE_AUTO_CONFIRM || !BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM) {
+                return@runModeButton
+            }
             serviceScope.launch {
                 settingsRepository.setPrimaryAutoConfirmEnabled(true)
                 settingsRepository.setPrimaryOrderListAutoEntryEnabled(true)
@@ -4872,6 +4906,15 @@ class CatchProAccessibilityService : AccessibilityService() {
         button.backgroundTintList = ColorStateList.valueOf(
             if (enabled) 0xFF059669.toInt() else 0xFFDC2626.toInt(),
         )
+        button.setTextColor(Color.WHITE)
+    }
+
+    private fun tintDisabledRunModeButton(
+        button: Button,
+        text: String,
+    ) {
+        button.text = text
+        button.backgroundTintList = ColorStateList.valueOf(0xFF6B7280.toInt())
         button.setTextColor(Color.WHITE)
     }
 

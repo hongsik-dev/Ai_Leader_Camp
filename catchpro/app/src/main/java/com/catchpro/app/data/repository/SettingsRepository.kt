@@ -25,6 +25,10 @@ class SettingsRepository @Inject constructor(
         val normalizedRouteAddresses = preferences[TmapManualRouteAddressesTextKey]
             .orEmpty()
             .normalizeManualRouteAddressesText()
+        val autoConfirmAvailable = BuildConfig.FEATURE_AUTO_CONFIRM
+        val autoDetailAvailable = BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM
+        val cloudSyncAvailable = BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC
+        val personalEdition = BuildConfig.IS_PERSONAL_EDITION
         AppSettings(
             clientBlacklistText = (preferences[ClientBlacklistTextKey] ?: DefaultClientBlacklistText)
                 .withDefaultClientBlacklistEntries(),
@@ -32,8 +36,10 @@ class SettingsRepository @Inject constructor(
             vibrationEnabled = preferences[VibrationEnabledKey] ?: true,
             voiceAlertsEnabled = preferences[VoiceAlertsEnabledKey] ?: true,
             keepScreenOn = preferences[KeepScreenOnKey] ?: false,
-            primaryOrderListAutoEntryEnabled = preferences[PrimaryOrderListAutoEntryEnabledKey] ?: false,
-            secondaryOrderListAutoEntryEnabled = preferences[SecondaryOrderListAutoEntryEnabledKey] ?: false,
+            primaryOrderListAutoEntryEnabled =
+                autoDetailAvailable && (preferences[PrimaryOrderListAutoEntryEnabledKey] ?: false),
+            secondaryOrderListAutoEntryEnabled =
+                autoDetailAvailable && (preferences[SecondaryOrderListAutoEntryEnabledKey] ?: false),
             orderListAutoEntryMaxChecksText = (preferences[OrderListAutoEntryMaxChecksTextKey]
                 ?: DefaultOrderListAutoEntryMaxChecksText)
                 .normalizeOrderListAutoEntryMaxChecksText(),
@@ -46,7 +52,8 @@ class SettingsRepository @Inject constructor(
                 ?.takeIf(String::isOperationalDestinationAddress)
                 .orEmpty(),
             tmapManualRouteAddressesText = normalizedRouteAddresses,
-            routeAddressCloudSyncEnabled = preferences[RouteAddressCloudSyncEnabledKey] ?: true,
+            routeAddressCloudSyncEnabled =
+                cloudSyncAvailable && (preferences[RouteAddressCloudSyncEnabledKey] ?: true),
             routeAddressCloudSyncRoomCode = preferences[RouteAddressCloudSyncRoomCodeKey]
                 ?.sanitizeRouteAddressCloudSyncRoomCode()
                 ?.takeIf { it.length == RouteAddressCloudSyncRoomCodeLength }
@@ -55,7 +62,7 @@ class SettingsRepository @Inject constructor(
                 ?.trim()
                 ?.takeIf(String::isNotBlank)
                 ?: DefaultRouteAddressCloudSyncServerUrl,
-            primaryAutoConfirmEnabled = preferences[AutoConfirmEnabledKey] ?: false,
+            primaryAutoConfirmEnabled = autoConfirmAvailable && (preferences[AutoConfirmEnabledKey] ?: false),
             primaryDestinationKeywords = preferences[AutoConfirmDestinationKeywordsKey].orEmpty(),
             primaryAutoConfirmExcludedKeywordsText = (preferences[PrimaryAutoConfirmExcludedKeywordsTextKey]
                 ?: DefaultPrimaryAutoConfirmExcludedKeywordsText)
@@ -74,12 +81,14 @@ class SettingsRepository @Inject constructor(
                 ?: DefaultPrimaryLongDistanceThresholdKmText,
             primaryLongDistanceMinimumPriceText = preferences[PrimaryLongDistanceMinimumPriceTextKey]
                 ?: DefaultPrimaryLongDistanceMinimumPriceText,
-            secondaryAutoConfirmEnabled = preferences[SecondaryAutoConfirmEnabledKey] ?: false,
+            secondaryAutoConfirmEnabled =
+                personalEdition && (preferences[SecondaryAutoConfirmEnabledKey] ?: false),
             secondaryMaximumPickupDistanceKmText = preferences[SecondaryAutoConfirmMaximumPickupDistanceKmTextKey]
                 ?: preferences[AutoConfirmMaximumPickupDistanceKmTextKey].orEmpty(),
             secondaryDestinationRadiusKmText = preferences[AutoConfirmDestinationRadiusKmTextKey].orEmpty(),
-            orderTrackingModeEnabled = preferences[OrderTrackingModeEnabledKey]
-                ?: (preferences[SecondaryAutoConfirmEnabledKey] ?: false),
+            orderTrackingModeEnabled = personalEdition &&
+                (preferences[OrderTrackingModeEnabledKey]
+                    ?: (preferences[SecondaryAutoConfirmEnabledKey] ?: false)),
             orderTrackingMaximumRouteDistanceKmText = preferences[OrderTrackingMaximumRouteDistanceKmTextKey].orEmpty(),
             orderTrackingMaxConfirmCountText = preferences[OrderTrackingMaxConfirmCountTextKey]
                 ?: DefaultOrderTrackingMaxConfirmCountText,
@@ -96,10 +105,10 @@ class SettingsRepository @Inject constructor(
     suspend fun setKeepScreenOn(enabled: Boolean) = updateBoolean(KeepScreenOnKey, enabled)
 
     suspend fun setPrimaryOrderListAutoEntryEnabled(enabled: Boolean) =
-        updateBoolean(PrimaryOrderListAutoEntryEnabledKey, enabled)
+        updateBoolean(PrimaryOrderListAutoEntryEnabledKey, enabled && BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM)
 
     suspend fun setSecondaryOrderListAutoEntryEnabled(enabled: Boolean) =
-        updateBoolean(SecondaryOrderListAutoEntryEnabledKey, enabled)
+        updateBoolean(SecondaryOrderListAutoEntryEnabledKey, enabled && BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM)
 
     suspend fun setOrderListAutoEntryMaxChecksText(value: String) {
         dataStore.edit { preferences ->
@@ -132,7 +141,7 @@ class SettingsRepository @Inject constructor(
     }
 
     suspend fun setPrimaryAutoConfirmEnabled(enabled: Boolean) =
-        updateBoolean(AutoConfirmEnabledKey, enabled)
+        updateBoolean(AutoConfirmEnabledKey, enabled && BuildConfig.FEATURE_AUTO_CONFIRM)
 
     suspend fun setActiveDriveDestinationText(value: String) {
         val address = value.trim()
@@ -264,7 +273,7 @@ class SettingsRepository @Inject constructor(
     }
 
     suspend fun setRouteAddressCloudSyncEnabled(enabled: Boolean) =
-        updateBoolean(RouteAddressCloudSyncEnabledKey, enabled)
+        updateBoolean(RouteAddressCloudSyncEnabledKey, enabled && BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC)
 
     suspend fun setRouteAddressCloudSyncRoomCode(value: String) {
         dataStore.edit { preferences ->
@@ -386,7 +395,7 @@ class SettingsRepository @Inject constructor(
     }
 
     suspend fun setSecondaryAutoConfirmEnabled(enabled: Boolean) =
-        updateBoolean(SecondaryAutoConfirmEnabledKey, enabled)
+        updateBoolean(SecondaryAutoConfirmEnabledKey, enabled && BuildConfig.IS_PERSONAL_EDITION)
 
     suspend fun setSecondaryMaximumPickupDistanceKmText(value: String) {
         dataStore.edit { preferences ->
@@ -401,7 +410,7 @@ class SettingsRepository @Inject constructor(
     }
 
     suspend fun setOrderTrackingModeEnabled(enabled: Boolean) =
-        updateBoolean(OrderTrackingModeEnabledKey, enabled)
+        updateBoolean(OrderTrackingModeEnabledKey, enabled && BuildConfig.IS_PERSONAL_EDITION)
 
     suspend fun setOrderTrackingMaximumRouteDistanceKmText(value: String) {
         dataStore.edit { preferences ->
