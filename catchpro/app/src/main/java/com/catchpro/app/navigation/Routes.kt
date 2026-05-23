@@ -1,6 +1,7 @@
 package com.catchpro.app.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Navigation
 import androidx.compose.material.icons.outlined.Place
@@ -14,6 +15,7 @@ object Routes {
     const val Presets = "presets"
     const val TmapQueue = "tmap_queue"
     const val Settings = "settings"
+    const val Guide = "guide"
     const val ObservationLog = "observation_log"
     const val MatchConfirmPattern = "match_confirm/{orderId}"
 
@@ -31,4 +33,15 @@ val topLevelDestinations = listOf(
     TopLevelDestination(Routes.Destinations, "오더 조건", Icons.Outlined.Place),
     TopLevelDestination(Routes.TmapQueue, "TMAP 연결", Icons.Outlined.Navigation),
     TopLevelDestination(Routes.Settings, "설정", Icons.Outlined.Settings),
+)
+
+val guideTopLevelDestination = TopLevelDestination(
+    Routes.Guide,
+    "사용설명",
+    Icons.AutoMirrored.Outlined.MenuBook,
+)
+
+val naviTopLevelDestinations = listOf(
+    TopLevelDestination(Routes.TmapQueue, "지도/네비", Icons.Outlined.Navigation),
+    guideTopLevelDestination,
 )

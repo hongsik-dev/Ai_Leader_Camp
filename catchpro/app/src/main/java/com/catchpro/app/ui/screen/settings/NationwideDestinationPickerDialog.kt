@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.catchpro.app.BuildConfig
 import com.catchpro.app.data.region.KoreaAdministrativeAreas
 import com.catchpro.app.data.region.KoreaAdministrativeSelection
 import com.catchpro.app.data.region.KoreaProvince
@@ -250,10 +251,12 @@ private fun ProvinceSelectionStep(
             subtitle = "먼저 시/도를 고른 뒤, 시·군·구와 동/읍/면까지 내려가서 권역을 고릅니다.",
         )
         SelectedRegionSummary(selectedKeywords = selectedKeywords)
-        FrequentDestinationPresetSection(
-            selectedKeywords = selectedKeywords,
-            onTogglePreset = onToggleFrequentDestinationPreset,
-        )
+        if (showFrequentDestinationPresets()) {
+            FrequentDestinationPresetSection(
+                selectedKeywords = selectedKeywords,
+                onTogglePreset = onToggleFrequentDestinationPreset,
+            )
+        }
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(provinces, key = { it.name }) { province ->
                 val isSelected = province.name == selectedProvinceName
@@ -1291,6 +1294,10 @@ private fun KoreaProvince.supportsWholeProvinceSelection(): Boolean {
 
 private fun KoreaProvince.opensTownSelectionOnDistrictClick(): Boolean {
     return name == "서울" || name == "경기"
+}
+
+private fun showFrequentDestinationPresets(): Boolean {
+    return BuildConfig.IS_PERSONAL_EDITION || BuildConfig.IS_NAVI_APP
 }
 
 private data class DistrictPickerOption(

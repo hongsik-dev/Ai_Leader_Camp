@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.catchpro.app.BuildConfig
 import com.naver.maps.geometry.LatLng
 import com.naver.maps.geometry.LatLngBounds
 import com.naver.maps.map.CameraUpdate
@@ -136,7 +137,7 @@ private fun updateRouteAddressMap(
     if (currentLatLng != null) {
         startCircleOverlay.apply {
             center = currentLatLng
-            radius = StartCircleRadiusMeters
+            radius = startCircleRadiusMeters()
             color = Color.argb(46, 0, 112, 255)
             outlineColor = Color.rgb(0, 74, 255)
             outlineWidth = 5
@@ -146,7 +147,7 @@ private fun updateRouteAddressMap(
         naverMap.locationOverlay.apply {
             isVisible = true
             position = currentLatLng
-            circleRadius = 45
+            circleRadius = locationOverlayCircleRadius()
             circleColor = Color.argb(44, 0, 112, 255)
             globalZIndex = 1000
         }
@@ -161,10 +162,10 @@ private fun updateRouteAddressMap(
             subCaptionText = "현재 위치"
             captionColor = Color.rgb(0, 52, 196)
             captionHaloColor = Color.WHITE
-            captionTextSize = 17f
-            subCaptionTextSize = 12f
-            width = CurrentMarkerWidth
-            height = CurrentMarkerHeight
+            captionTextSize = currentMarkerCaptionTextSize()
+            subCaptionTextSize = currentMarkerSubCaptionTextSize()
+            width = currentMarkerWidth()
+            height = currentMarkerHeight()
             zIndex = 100
             globalZIndex = 2000
             setForceShowIcon(true)
@@ -240,7 +241,8 @@ private fun updateRouteAddressMap(
                     append(". ")
                 }
                 append(point.label)
-                point.distanceKmFromCurrentLocation?.let {
+                val displayDistanceKm = nearestStop?.legDistanceKm ?: point.distanceKmFromCurrentLocation
+                displayDistanceKm?.let {
                     append(" ")
                     append(it.formatDistanceKm())
                     append("km")
@@ -252,7 +254,15 @@ private fun updateRouteAddressMap(
             captionTextSize = 13f
             subCaptionText = when {
                 overlapsCurrent -> "출발점 근처"
-                nearestStop != null -> "방문 ${nearestStop.order}"
+                nearestStop != null -> buildString {
+                    append("방문 ")
+                    append(nearestStop.order)
+                    append(" · 구간주행")
+                    nearestStop.legDurationText?.let {
+                        append(" · 예상 ")
+                        append(it)
+                    }
+                }
                 else -> ""
             }
             subCaptionTextSize = 10f
@@ -374,16 +384,37 @@ private fun Double.formatDistanceKm(): String {
 
 private const val CurrentMarkerKey = "current"
 private const val NextStopArrowPathKey = "next-stop-arrow"
-private const val CurrentMarkerWidth = 118
-private const val CurrentMarkerHeight = 150
+private const val FreeCurrentMarkerWidth = 56
+private const val FreeCurrentMarkerHeight = 76
+private const val ProCurrentMarkerWidth = 56
+private const val ProCurrentMarkerHeight = 76
 private const val NextStopArrowPatternWidth = 64
 private const val NextStopArrowPatternHeight = 24
 private const val NextStopArrowPatternInterval = 54
-private const val StartCircleRadiusMeters = 650.0
+private const val FreeStartCircleRadiusMeters = 90.0
+private const val ProStartCircleRadiusMeters = 90.0
 private const val MapContentPaddingHorizontal = 32
 private const val MapContentPaddingTop = 430
 private const val MapContentPaddingBottom = 620
 private const val MarkerOverlapThresholdMeters = 800.0
+
+private fun currentMarkerWidth(): Int =
+    if (BuildConfig.IS_FREE_EDITION) FreeCurrentMarkerWidth else ProCurrentMarkerWidth
+
+private fun currentMarkerHeight(): Int =
+    if (BuildConfig.IS_FREE_EDITION) FreeCurrentMarkerHeight else ProCurrentMarkerHeight
+
+private fun locationOverlayCircleRadius(): Int =
+    if (BuildConfig.IS_FREE_EDITION) 18 else 18
+
+private fun startCircleRadiusMeters(): Double =
+    if (BuildConfig.IS_FREE_EDITION) FreeStartCircleRadiusMeters else ProStartCircleRadiusMeters
+
+private fun currentMarkerCaptionTextSize(): Float =
+    if (BuildConfig.IS_FREE_EDITION) 12f else 12f
+
+private fun currentMarkerSubCaptionTextSize(): Float =
+    if (BuildConfig.IS_FREE_EDITION) 9f else 9f
 
 private fun LatLng.distanceMetersTo(other: LatLng): Double {
     val earthRadiusMeters = 6_371_000.0
@@ -400,7 +431,9 @@ private fun LatLng.distanceMetersTo(other: LatLng): Double {
 }
 
 private fun startMarkerIcon(): OverlayImage {
-    val bitmap = Bitmap.createBitmap(CurrentMarkerWidth, CurrentMarkerHeight, Bitmap.Config.ARGB_8888)
+    val markerWidth = currentMarkerWidth()
+    val markerHeight = currentMarkerHeight()
+    val bitmap = Bitmap.createBitmap(markerWidth, markerHeight, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -408,19 +441,20 @@ private fun startMarkerIcon(): OverlayImage {
     }
     val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 6f
+        strokeWidth = 4f
         color = Color.WHITE
     }
     val point = Path().apply {
-        moveTo(CurrentMarkerWidth / 2f, CurrentMarkerHeight - 6f)
-        lineTo(CurrentMarkerWidth * 0.22f, CurrentMarkerHeight * 0.56f)
-        lineTo(CurrentMarkerWidth * 0.78f, CurrentMarkerHeight * 0.56f)
+        moveTo(markerWidth / 2f, markerHeight - 6f)
+        lineTo(markerWidth * 0.22f, markerHeight * 0.56f)
+        lineTo(markerWidth * 0.78f, markerHeight * 0.56f)
         close()
     }
     canvas.drawPath(point, fill)
     canvas.drawPath(point, stroke)
-    canvas.drawCircle(CurrentMarkerWidth / 2f, CurrentMarkerHeight * 0.36f, 32f, fill)
-    canvas.drawCircle(CurrentMarkerWidth / 2f, CurrentMarkerHeight * 0.36f, 32f, stroke)
+    val circleRadius = markerWidth * 0.24f
+    canvas.drawCircle(markerWidth / 2f, markerHeight * 0.36f, circleRadius, fill)
+    canvas.drawCircle(markerWidth / 2f, markerHeight * 0.36f, circleRadius, stroke)
     return OverlayImage.fromBitmap(bitmap)
 }
 

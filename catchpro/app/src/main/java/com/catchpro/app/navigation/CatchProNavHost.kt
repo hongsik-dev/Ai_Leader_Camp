@@ -27,6 +27,7 @@ import com.catchpro.app.data.sync.RouteAddressCloudSyncManager
 import com.catchpro.app.observation.NaverRouteDistanceService
 import com.catchpro.app.ui.screen.dashboard.DashboardScreen
 import com.catchpro.app.ui.screen.destinations.DestinationsScreen
+import com.catchpro.app.ui.screen.guide.GuideScreen
 import com.catchpro.app.ui.screen.match.MatchConfirmScreen
 import com.catchpro.app.ui.screen.observation.ObservationLogScreen
 import com.catchpro.app.ui.screen.onboarding.OnboardingScreen
@@ -46,10 +47,12 @@ fun CatchProNavHost(
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
-    val availableTopLevelDestinations = if (BuildConfig.IS_NAVI_APP) {
-        emptyList()
-    } else {
-        topLevelDestinations
+    val showEditionGuide = BuildConfig.IS_FREE_EDITION || BuildConfig.IS_PRO_EDITION
+    val availableTopLevelDestinations = when {
+        BuildConfig.IS_NAVI_APP && showEditionGuide -> naviTopLevelDestinations
+        BuildConfig.IS_NAVI_APP -> emptyList()
+        showEditionGuide -> topLevelDestinations + guideTopLevelDestination
+        else -> topLevelDestinations
     }
     val showBottomBar = availableTopLevelDestinations.any { destination ->
         currentDestination?.hierarchy?.any { it.route == destination.route } == true
@@ -69,7 +72,7 @@ fun CatchProNavHost(
                                 navController.navigate(destination.route) {
                                     launchSingleTop = true
                                     restoreState = true
-                                    popUpTo(Routes.Dashboard) {
+                                    popUpTo(if (BuildConfig.IS_NAVI_APP) Routes.TmapQueue else Routes.Dashboard) {
                                         saveState = true
                                     }
                                 }
@@ -132,6 +135,9 @@ fun CatchProNavHost(
                     captureRepository = accessibilityCaptureRepository,
                     settingsRepository = settingsRepository,
                 )
+            }
+            composable(Routes.Guide) {
+                GuideScreen()
             }
             composable(Routes.ObservationLog) {
                 ObservationLogScreen(

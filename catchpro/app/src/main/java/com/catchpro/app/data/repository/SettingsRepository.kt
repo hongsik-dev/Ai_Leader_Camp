@@ -1,5 +1,6 @@
 package com.catchpro.app.data.repository
 
+import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -9,6 +10,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.catchpro.app.BuildConfig
 import com.catchpro.app.data.model.AppSettings
 import com.catchpro.app.data.sync.RouteAddressSyncPayload
+import com.catchpro.app.feature.CatchProFeatureGate
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,15 +22,17 @@ private const val ManualRouteAddressSlotCount = 6
 
 @Singleton
 class SettingsRepository @Inject constructor(
+    @param:ApplicationContext private val context: Context,
     private val dataStore: DataStore<Preferences>,
 ) {
     val settings: Flow<AppSettings> = dataStore.data.map { preferences ->
         val normalizedRouteAddresses = preferences[TmapManualRouteAddressesTextKey]
             .orEmpty()
             .normalizeManualRouteAddressesText()
-        val autoConfirmAvailable = BuildConfig.FEATURE_AUTO_CONFIRM
-        val autoDetailAvailable = BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM
-        val cloudSyncAvailable = BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC
+        val autoConfirmAvailable = CatchProFeatureGate.autoConfirmAvailable(context)
+        val autoDetailAvailable = CatchProFeatureGate.experimentalAutoDetailConfirmAvailable(context)
+        val cloudSyncAvailable = CatchProFeatureGate.routeAddressCloudSyncAvailable(context)
+        val naviOptimizationAvailable = CatchProFeatureGate.naviOptimizationAvailable(context)
         val personalEdition = BuildConfig.IS_PERSONAL_EDITION
         AppSettings(
             clientBlacklistText = (preferences[ClientBlacklistTextKey] ?: DefaultClientBlacklistText)
@@ -36,6 +41,10 @@ class SettingsRepository @Inject constructor(
             vibrationEnabled = preferences[VibrationEnabledKey] ?: true,
             voiceAlertsEnabled = preferences[VoiceAlertsEnabledKey] ?: true,
             keepScreenOn = preferences[KeepScreenOnKey] ?: false,
+            autoConfirmFeatureAvailable = autoConfirmAvailable,
+            autoDetailConfirmFeatureAvailable = autoDetailAvailable,
+            routeAddressCloudSyncFeatureAvailable = cloudSyncAvailable,
+            naviOptimizationFeatureAvailable = naviOptimizationAvailable,
             primaryOrderListAutoEntryEnabled =
                 autoDetailAvailable && (preferences[PrimaryOrderListAutoEntryEnabledKey] ?: false),
             secondaryOrderListAutoEntryEnabled =
@@ -105,10 +114,16 @@ class SettingsRepository @Inject constructor(
     suspend fun setKeepScreenOn(enabled: Boolean) = updateBoolean(KeepScreenOnKey, enabled)
 
     suspend fun setPrimaryOrderListAutoEntryEnabled(enabled: Boolean) =
-        updateBoolean(PrimaryOrderListAutoEntryEnabledKey, enabled && BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM)
+        updateBoolean(
+            PrimaryOrderListAutoEntryEnabledKey,
+            enabled && CatchProFeatureGate.experimentalAutoDetailConfirmAvailable(context),
+        )
 
     suspend fun setSecondaryOrderListAutoEntryEnabled(enabled: Boolean) =
-        updateBoolean(SecondaryOrderListAutoEntryEnabledKey, enabled && BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM)
+        updateBoolean(
+            SecondaryOrderListAutoEntryEnabledKey,
+            enabled && CatchProFeatureGate.experimentalAutoDetailConfirmAvailable(context),
+        )
 
     suspend fun setOrderListAutoEntryMaxChecksText(value: String) {
         dataStore.edit { preferences ->
@@ -141,7 +156,7 @@ class SettingsRepository @Inject constructor(
     }
 
     suspend fun setPrimaryAutoConfirmEnabled(enabled: Boolean) =
-        updateBoolean(AutoConfirmEnabledKey, enabled && BuildConfig.FEATURE_AUTO_CONFIRM)
+        updateBoolean(AutoConfirmEnabledKey, enabled && CatchProFeatureGate.autoConfirmAvailable(context))
 
     suspend fun setActiveDriveDestinationText(value: String) {
         val address = value.trim()
@@ -273,7 +288,7 @@ class SettingsRepository @Inject constructor(
     }
 
     suspend fun setRouteAddressCloudSyncEnabled(enabled: Boolean) =
-        updateBoolean(RouteAddressCloudSyncEnabledKey, enabled && BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC)
+        updateBoolean(RouteAddressCloudSyncEnabledKey, enabled && CatchProFeatureGate.routeAddressCloudSyncAvailable(context))
 
     suspend fun setRouteAddressCloudSyncRoomCode(value: String) {
         dataStore.edit { preferences ->
@@ -661,16 +676,14 @@ private fun List<RouteAddressCompletionTombstone>.toRouteAddressCompletionTombst
 
 private const val RouteAddressCompletionTombstoneTtlMillis = 30 * 60 * 1000L
 
-private fun String.normalizeManualRouteAddressesText(): String =
+internal fun String.normalizeManualRouteAddressesText(): String =
     manualRouteAddressSlots()
         .joinToString("\n")
 
-private fun String.manualRouteAddressSlots(): List<String> =
+internal fun String.manualRouteAddressSlots(): List<String> =
     split('\n')
         .map { line ->
             line.trim()
-                .takeIf(String::isOperationalDestinationAddress)
-                .orEmpty()
         }
         .take(ManualRouteAddressSlotCount)
         .let { slots ->

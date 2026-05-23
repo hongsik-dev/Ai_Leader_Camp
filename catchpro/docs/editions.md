@@ -13,6 +13,21 @@ CatchPro는 개인 운행판과 배포판을 같은 코드베이스에서 다른
 | `naviFree` | CatchPro Navi Free | `com.catchpro.navi.free` | 무료 지도/네비 배포판. 기본 지도 확인용. |
 | `naviPro` | CatchPro Navi Pro | `com.catchpro.navi.pro` | 유료 지도/네비 배포판. AWS 주소 동기화, 방문순서, 행정동 거리 확인을 제공한다. |
 
+## Version Separation
+
+고객 배포판은 개인 운행판과 설치 패키지뿐 아니라 Android `versionCode` 대역도 분리한다.
+
+| Gradle flavor | versionCode 대역 | versionName 예시 |
+| --- | ---: | --- |
+| `insung` | `12` | `0.1.11` |
+| `navi` | `50012` | `0.1.11-navi` |
+| `insungFree` | `10012` | `0.1.11-insung-free` |
+| `insungPro` | `20012` | `0.1.11-insung-pro` |
+| `naviFree` | `30012` | `0.1.11-navi-free` |
+| `naviPro` | `40012` | `0.1.11-navi-pro` |
+
+새 버전을 배포할 때는 `app/build.gradle.kts`의 `catchProVersionCode`, `catchProVersionName`을 올리고, 각 배포판은 위 대역 규칙으로 자동 계산되게 둔다.
+
 ## Feature Rules
 
 - `자동확정`: `insung`, `insungPro`에서만 켠다.
@@ -31,6 +46,20 @@ CatchPro는 개인 운행판과 배포판을 같은 코드베이스에서 다른
 .\gradlew.bat :app:assembleNaviFreeDebug
 .\gradlew.bat :app:assembleNaviProDebug
 ```
+
+고객에게 전달할 파일은 아래 태스크로 별도 폴더에 모은다.
+
+```powershell
+.\gradlew.bat :app:collectCustomerDebugApks
+.\gradlew.bat :app:collectCustomerReleaseApks
+```
+
+출력 위치:
+
+- Debug: `app/build/customer-apks/debug`
+- Release: `app/build/customer-apks/release`
+
+파일명은 `CatchPro-Insung-Free-v0.1.11-debug.apk`처럼 고객 배포판 이름과 버전이 드러나도록 고정한다.
 
 ## Naver Maps Package Registration
 
