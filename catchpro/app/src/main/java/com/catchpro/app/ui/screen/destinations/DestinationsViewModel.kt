@@ -3,8 +3,8 @@ package com.catchpro.app.ui.screen.destinations
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.catchpro.app.feature.CatchProEdition
 import com.catchpro.app.data.repository.SettingsRepository
+import com.catchpro.app.feature.CatchProEdition
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -17,8 +17,8 @@ data class DestinationsUiState(
     val orderListAutoEntryMaxChecksText: String = "30",
     val destinationKeywords: String = "",
     val minimumPriceText: String = "",
-    val autoConfirmFeatureAvailable: Boolean = CatchProEdition.autoConfirmAvailable,
-    val autoDetailFeatureAvailable: Boolean = CatchProEdition.experimentalAutoDetailConfirmAvailable,
+    val autoConfirmFeatureAvailable: Boolean = false,
+    val autoDetailFeatureAvailable: Boolean = false,
     val editionLabel: String = CatchProEdition.label,
 )
 
@@ -33,8 +33,8 @@ class DestinationsViewModel(
                 orderListAutoEntryMaxChecksText = settings.orderListAutoEntryMaxChecksText,
                 destinationKeywords = settings.primaryDestinationKeywords,
                 minimumPriceText = settings.primaryMinimumPriceText,
-                autoConfirmFeatureAvailable = CatchProEdition.autoConfirmAvailable,
-                autoDetailFeatureAvailable = CatchProEdition.experimentalAutoDetailConfirmAvailable,
+                autoConfirmFeatureAvailable = settings.autoConfirmFeatureAvailable,
+                autoDetailFeatureAvailable = settings.autoDetailConfirmFeatureAvailable,
                 editionLabel = CatchProEdition.label,
             )
         }
@@ -45,14 +45,12 @@ class DestinationsViewModel(
         )
 
     fun setEnabled(enabled: Boolean) {
-        if (!CatchProEdition.autoConfirmAvailable) return
         viewModelScope.launch {
             settingsRepository.setPrimaryAutoConfirmEnabled(enabled)
         }
     }
 
     fun setOrderListAutoEntryEnabled(enabled: Boolean) {
-        if (!CatchProEdition.experimentalAutoDetailConfirmAvailable) return
         viewModelScope.launch {
             settingsRepository.setPrimaryOrderListAutoEntryEnabled(enabled)
         }
@@ -69,7 +67,7 @@ class DestinationsViewModel(
         minimumPriceText: String,
     ) {
         viewModelScope.launch {
-            if (CatchProEdition.autoConfirmAvailable) {
+            if (uiState.value.autoConfirmFeatureAvailable) {
                 settingsRepository.setPrimaryAutoConfirmEnabled(true)
             }
             settingsRepository.setPrimaryDestinationKeywords(destinationKeywords)

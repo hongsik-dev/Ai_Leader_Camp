@@ -7,6 +7,9 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
+val catchProVersionCode = 12
+val catchProVersionName = "0.1.11"
+
 android {
     val localProperties = Properties().apply {
         val localPropertiesFile = rootProject.file("local.properties")
@@ -16,7 +19,7 @@ android {
     }
     val kakaoRestApiKey = localProperties.getProperty("kakao.rest.api.key", "")
     val naverMapNcpKeyId = localProperties.getProperty("naver.map.ncp.key.id", "")
-    val naverMapNcpKey = localProperties.getProperty("naver.map.ncp.key", "")
+    val naverProxyBaseUrl = localProperties.getProperty("naver.proxy.base.url", "http://43.200.8.165/api/naver")
 
     namespace = "com.catchpro.app"
     compileSdk = 37
@@ -25,11 +28,12 @@ android {
         applicationId = "com.catchpro.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 12
-        versionName = "0.1.11"
+        versionCode = catchProVersionCode
+        versionName = catchProVersionName
         buildConfigField("String", "KAKAO_REST_API_KEY", "\"${kakaoRestApiKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "NAVER_MAP_NCP_KEY_ID", "\"${naverMapNcpKeyId.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
-        buildConfigField("String", "NAVER_MAP_NCP_KEY", "\"${naverMapNcpKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("String", "NAVER_MAP_NCP_KEY", "\"\"")
+        buildConfigField("String", "NAVER_PROXY_BASE_URL", "\"${naverProxyBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -55,6 +59,7 @@ android {
         create("navi") {
             dimension = "deviceRole"
             applicationId = "com.catchpro.app"
+            versionCode = 50_000 + catchProVersionCode
             versionNameSuffix = "-navi"
             buildConfigField("boolean", "IS_NAVI_APP", "true")
             buildConfigField("String", "CATCHPRO_EDITION", "\"personal\"")
@@ -69,6 +74,7 @@ android {
         create("insungFree") {
             dimension = "deviceRole"
             applicationId = "com.catchpro.insung.free"
+            versionCode = 10_000 + catchProVersionCode
             versionNameSuffix = "-insung-free"
             buildConfigField("boolean", "IS_NAVI_APP", "false")
             buildConfigField("String", "CATCHPRO_EDITION", "\"free\"")
@@ -83,6 +89,7 @@ android {
         create("insungPro") {
             dimension = "deviceRole"
             applicationId = "com.catchpro.insung.pro"
+            versionCode = 20_000 + catchProVersionCode
             versionNameSuffix = "-insung-pro"
             buildConfigField("boolean", "IS_NAVI_APP", "false")
             buildConfigField("String", "CATCHPRO_EDITION", "\"pro\"")
@@ -97,6 +104,7 @@ android {
         create("naviFree") {
             dimension = "deviceRole"
             applicationId = "com.catchpro.navi.free"
+            versionCode = 30_000 + catchProVersionCode
             versionNameSuffix = "-navi-free"
             buildConfigField("boolean", "IS_NAVI_APP", "true")
             buildConfigField("String", "CATCHPRO_EDITION", "\"free\"")
@@ -111,6 +119,7 @@ android {
         create("naviPro") {
             dimension = "deviceRole"
             applicationId = "com.catchpro.navi.pro"
+            versionCode = 40_000 + catchProVersionCode
             versionNameSuffix = "-navi-pro"
             buildConfigField("boolean", "IS_NAVI_APP", "true")
             buildConfigField("String", "CATCHPRO_EDITION", "\"pro\"")
@@ -181,6 +190,57 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+val customerDebugApkDir = layout.buildDirectory.dir("customer-apks/debug")
+val customerReleaseApkDir = layout.buildDirectory.dir("customer-apks/release")
+
+tasks.register<Copy>("collectCustomerDebugApks") {
+    group = "distribution"
+    description = "Collects customer Free/Pro debug APKs with stable distribution file names."
+    dependsOn(
+        "assembleInsungFreeDebug",
+        "assembleInsungProDebug",
+        "assembleNaviFreeDebug",
+        "assembleNaviProDebug",
+    )
+    into(customerDebugApkDir)
+    from(layout.buildDirectory.file("outputs/apk/insungFree/debug/app-insungFree-debug.apk")) {
+        rename { "CatchPro-Insung-Free-v$catchProVersionName-debug.apk" }
+    }
+    from(layout.buildDirectory.file("outputs/apk/insungPro/debug/app-insungPro-debug.apk")) {
+        rename { "CatchPro-Insung-Pro-v$catchProVersionName-debug.apk" }
+    }
+    from(layout.buildDirectory.file("outputs/apk/naviFree/debug/app-naviFree-debug.apk")) {
+        rename { "CatchPro-Navi-Free-v$catchProVersionName-debug.apk" }
+    }
+    from(layout.buildDirectory.file("outputs/apk/naviPro/debug/app-naviPro-debug.apk")) {
+        rename { "CatchPro-Navi-Pro-v$catchProVersionName-debug.apk" }
+    }
+}
+
+tasks.register<Copy>("collectCustomerReleaseApks") {
+    group = "distribution"
+    description = "Collects customer Free/Pro release APKs with stable distribution file names."
+    dependsOn(
+        "assembleInsungFreeRelease",
+        "assembleInsungProRelease",
+        "assembleNaviFreeRelease",
+        "assembleNaviProRelease",
+    )
+    into(customerReleaseApkDir)
+    from(layout.buildDirectory.file("outputs/apk/insungFree/release/app-insungFree-release-unsigned.apk")) {
+        rename { "CatchPro-Insung-Free-v$catchProVersionName-release-unsigned.apk" }
+    }
+    from(layout.buildDirectory.file("outputs/apk/insungPro/release/app-insungPro-release-unsigned.apk")) {
+        rename { "CatchPro-Insung-Pro-v$catchProVersionName-release-unsigned.apk" }
+    }
+    from(layout.buildDirectory.file("outputs/apk/naviFree/release/app-naviFree-release-unsigned.apk")) {
+        rename { "CatchPro-Navi-Free-v$catchProVersionName-release-unsigned.apk" }
+    }
+    from(layout.buildDirectory.file("outputs/apk/naviPro/release/app-naviPro-release-unsigned.apk")) {
+        rename { "CatchPro-Navi-Pro-v$catchProVersionName-release-unsigned.apk" }
     }
 }
 

@@ -1,5 +1,6 @@
 package com.catchpro.app.observation
 
+import com.catchpro.app.BuildConfig
 import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,36 +13,36 @@ class NaverRouteDistanceService @Inject constructor(
     private val okHttpClient: OkHttpClient,
 ) {
     fun drivingDistanceKm(
-        clientId: String,
-        clientSecret: String,
         origin: RouteWaypoint,
         destination: RouteWaypoint,
+        source: String = "navi_directions",
     ): RouteDistanceOutcome {
-        if (clientId.isBlank() || clientSecret.isBlank()) {
-            return RouteDistanceOutcome.failure("네이버 Maps API 키가 비어 있습니다.")
+        if (!BuildConfig.IS_NAVI_APP) {
+            return RouteDistanceOutcome.failure("네이버 길찾기는 CatchPro Navi에서만 사용할 수 있습니다.")
+        }
+        val proxyBaseUrl = naverProxyBaseUrl()
+        if (proxyBaseUrl.isBlank()) {
+            return RouteDistanceOutcome.failure("네이버 프록시 서버 주소가 비어 있습니다.")
         }
 
         val originPoint = resolvePoint(
-            clientId = clientId,
-            clientSecret = clientSecret,
             waypoint = origin,
+            source = source,
         ) ?: return RouteDistanceOutcome.failure("네이버 Geocoding이 출발지 좌표를 찾지 못했습니다.")
         val destinationPoint = resolvePoint(
-            clientId = clientId,
-            clientSecret = clientSecret,
             waypoint = destination,
+            source = source,
         ) ?: return RouteDistanceOutcome.failure("네이버 Geocoding이 목적지 좌표를 찾지 못했습니다.")
 
         val url = buildString {
-            append(NaverDirectionUrl)
+            append(proxyBaseUrl)
+            append("/directions")
             append("?start=${originPoint.longitude},${originPoint.latitude}")
             append("&goal=${destinationPoint.longitude},${destinationPoint.latitude}")
             append("&option=trafast")
+            append("&source=${source.toNaverProxySourceParam()}")
         }
-        val request = baseRequestBuilder(
-            clientId = clientId,
-            clientSecret = clientSecret,
-        )
+        val request = Request.Builder()
             .url(url)
             .build()
 
@@ -98,25 +99,22 @@ class NaverRouteDistanceService @Inject constructor(
     }
 
     fun geocodeAddress(
-        clientId: String,
-        clientSecret: String,
         address: String,
+        source: String = "navi_geocode",
     ): NaverPoint? {
-        if (clientId.isBlank() || clientSecret.isBlank()) return null
+        if (naverProxyBaseUrl().isBlank()) return null
         return address.naverSearchQueries()
             .firstNotNullOfOrNull { query ->
                 searchAddress(
-                    clientId = clientId,
-                    clientSecret = clientSecret,
                     query = query,
+                    source = source,
                 )
             }
     }
 
     private fun resolvePoint(
-        clientId: String,
-        clientSecret: String,
         waypoint: RouteWaypoint,
+        source: String,
     ): NaverPoint? {
         return when (waypoint) {
             is RouteWaypoint.LatLng -> NaverPoint(
@@ -124,24 +122,21 @@ class NaverRouteDistanceService @Inject constructor(
                 latitude = waypoint.latitude,
             )
             is RouteWaypoint.Address -> geocodeAddress(
-                clientId = clientId,
-                clientSecret = clientSecret,
                 address = waypoint.address,
+                source = source,
             )
         }
     }
 
     private fun searchAddress(
-        clientId: String,
-        clientSecret: String,
         query: String,
+        source: String,
     ): NaverPoint? {
+        val proxyBaseUrl = naverProxyBaseUrl()
+        if (proxyBaseUrl.isBlank()) return null
         val encodedQuery = URLEncoder.encode(query, Charsets.UTF_8.name())
-        val request = baseRequestBuilder(
-            clientId = clientId,
-            clientSecret = clientSecret,
-        )
-            .url("$NaverGeocodeUrl?query=$encodedQuery")
+        val request = Request.Builder()
+            .url("$proxyBaseUrl/geocode?query=$encodedQuery&source=${source.toNaverProxySourceParam()}")
             .build()
 
         return runCatching {
@@ -164,14 +159,17 @@ class NaverRouteDistanceService @Inject constructor(
         }.getOrNull()
     }
 
-    private fun baseRequestBuilder(
-        clientId: String,
-        clientSecret: String,
-    ): Request.Builder {
-        return Request.Builder()
-            .header("X-NCP-APIGW-API-KEY-ID", clientId)
-            .header("X-NCP-APIGW-API-KEY", clientSecret)
-    }
+    private fun naverProxyBaseUrl(): String =
+        BuildConfig.NAVER_PROXY_BASE_URL.trim().trimEnd('/')
+
+    private fun String.toNaverProxySourceParam(): String =
+        URLEncoder.encode(
+            trim()
+                .ifBlank { "unknown" }
+                .replace(Regex("""[^\w.-]"""), "_")
+                .take(40),
+            Charsets.UTF_8.name(),
+        )
 
     private fun String.naverSearchQueries(): List<String> {
         val normalized = trim()
@@ -224,9 +222,4 @@ class NaverRouteDistanceService @Inject constructor(
         val longitude: Double,
         val latitude: Double,
     )
-
-    private companion object {
-        const val NaverGeocodeUrl = "https://maps.apigw.ntruss.com/map-geocode/v2/geocode"
-        const val NaverDirectionUrl = "https://maps.apigw.ntruss.com/map-direction/v1/driving"
-    }
 }

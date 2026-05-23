@@ -49,6 +49,7 @@ import com.catchpro.app.data.repository.SettingsRepository
 import com.catchpro.app.data.repository.TmapQueueRepository
 import com.catchpro.app.data.repository.isOperationalDestinationAddress
 import com.catchpro.app.data.sync.RouteAddressCloudSyncManager
+import com.catchpro.app.feature.CatchProFeatureGate
 import com.catchpro.app.observation.AddressDistanceResolver
 import com.catchpro.app.observation.AutoConfirmDecision
 import com.catchpro.app.observation.AutoConfirmEvaluator
@@ -2216,7 +2217,7 @@ class CatchProAccessibilityService : AccessibilityService() {
         capturedAtMillis: Long,
         parsedDraftOverride: ParsedOrderDraft? = null,
     ): Boolean {
-        if (!BuildConfig.FEATURE_AUTO_CONFIRM) {
+        if (!CatchProFeatureGate.autoConfirmAvailable(this)) {
             return false
         }
         if (!isSupportedInsungPackage(packageName)) {
@@ -2393,7 +2394,7 @@ class CatchProAccessibilityService : AccessibilityService() {
     }
 
     private fun currentAutoEntryMode(): AutoEntryMode? {
-        if (!BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM) return null
+        if (!CatchProFeatureGate.experimentalAutoDetailConfirmAvailable(this)) return null
         if (!activeSettings.primaryOrderListAutoEntryEnabled) return null
         return AutoEntryMode.Primary
     }
@@ -4711,9 +4712,9 @@ class CatchProAccessibilityService : AccessibilityService() {
         }
 
         val overlay = ensureRunModeOverlay()
-        val autoConfirmAvailable = BuildConfig.FEATURE_AUTO_CONFIRM
-        val autoEntryAvailable = BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM
-        val awsSyncAvailable = BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC
+        val autoConfirmAvailable = CatchProFeatureGate.autoConfirmAvailable(this)
+        val autoEntryAvailable = CatchProFeatureGate.experimentalAutoDetailConfirmAvailable(this)
+        val awsSyncAvailable = CatchProFeatureGate.routeAddressCloudSyncAvailable(this)
         val autoConfirmOn = autoConfirmAvailable && settings.primaryAutoConfirmEnabled
         val autoEntryOn = autoEntryAvailable && settings.primaryOrderListAutoEntryEnabled
         val awsSyncOn = awsSyncAvailable && settings.routeAddressCloudSyncEnabled
@@ -4773,9 +4774,9 @@ class CatchProAccessibilityService : AccessibilityService() {
             settings.primaryOrderListAutoEntryEnabled,
             settings.routeAddressCloudSyncEnabled,
             BuildConfig.CATCHPRO_EDITION,
-            BuildConfig.FEATURE_AUTO_CONFIRM,
-            BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM,
-            BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC,
+            CatchProFeatureGate.autoConfirmAvailable(this),
+            CatchProFeatureGate.experimentalAutoDetailConfirmAvailable(this),
+            CatchProFeatureGate.routeAddressCloudSyncAvailable(this),
         ).joinToString("|")
     }
 
@@ -4805,19 +4806,19 @@ class CatchProAccessibilityService : AccessibilityService() {
             setPadding(0, 0, 0, 0)
         }
         val autoConfirmButton = runModeButton {
-            if (!BuildConfig.FEATURE_AUTO_CONFIRM) return@runModeButton
+            if (!CatchProFeatureGate.autoConfirmAvailable(this)) return@runModeButton
             serviceScope.launch {
                 settingsRepository.setPrimaryAutoConfirmEnabled(!activeSettings.primaryAutoConfirmEnabled)
             }
         }
         val autoEntryButton = runModeButton {
-            if (!BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM) return@runModeButton
+            if (!CatchProFeatureGate.experimentalAutoDetailConfirmAvailable(this)) return@runModeButton
             serviceScope.launch {
                 settingsRepository.setPrimaryOrderListAutoEntryEnabled(!activeSettings.primaryOrderListAutoEntryEnabled)
             }
         }
         val awsButton = runModeButton {
-            if (!BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC) return@runModeButton
+            if (!CatchProFeatureGate.routeAddressCloudSyncAvailable(this)) return@runModeButton
             serviceScope.launch {
                 settingsRepository.setRouteAddressCloudSyncEnabled(!activeSettings.routeAddressCloudSyncEnabled)
             }
@@ -4825,7 +4826,10 @@ class CatchProAccessibilityService : AccessibilityService() {
             minWidth = dp(58)
         }
         val enableDriveModeButton = runModeButton {
-            if (!BuildConfig.FEATURE_AUTO_CONFIRM || !BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM) {
+            if (
+                !CatchProFeatureGate.autoConfirmAvailable(this) ||
+                !CatchProFeatureGate.experimentalAutoDetailConfirmAvailable(this)
+            ) {
                 return@runModeButton
             }
             serviceScope.launch {

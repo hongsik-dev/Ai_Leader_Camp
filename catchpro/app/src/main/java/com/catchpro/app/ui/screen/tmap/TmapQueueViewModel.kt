@@ -1,6 +1,7 @@
 package com.catchpro.app.ui.screen.tmap
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -13,6 +14,7 @@ import com.catchpro.app.observation.DeviceLocationProvider
 import com.catchpro.app.observation.NaverRouteDistanceService
 import com.catchpro.app.observation.RouteDistanceOutcome
 import com.catchpro.app.observation.RouteWaypoint
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.atan2
@@ -28,6 +30,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 data class TmapRouteStopUiModel(
     val sourceIndex: Int,
@@ -93,6 +96,10 @@ data class RouteAddressMapUiState(
     val currentLatitude: Double? = null,
     val currentLongitude: Double? = null,
     val currentAccuracyMeters: Float? = null,
+    val routeCalculatedAtMillis: Long? = null,
+    val routeOriginLatitude: Double? = null,
+    val routeOriginLongitude: Double? = null,
+    val routeOriginMovedKm: Double? = null,
     val points: List<RouteAddressMapPointUiModel> = emptyList(),
     val nearestStops: List<RouteAddressNearestStopUiModel> = emptyList(),
     val nearestTotalDistanceKm: Double? = null,
@@ -103,6 +110,7 @@ data class RouteAddressMapUiState(
 data class TmapQueueUiState(
     val isOptimizing: Boolean = false,
     val isRefreshingMap: Boolean = false,
+    val isCalculatingRoute: Boolean = false,
     val manualRouteAddresses: List<String> = List(ManualRouteAddressSlotCount) { "" },
     val routeAddressMap: RouteAddressMapUiState = RouteAddressMapUiState(),
     val routeAddressCloudSyncEnabled: Boolean = false,
@@ -123,12 +131,17 @@ class TmapQueueViewModel(
     private val _uiState = MutableStateFlow(TmapQueueUiState())
     val uiState: StateFlow<TmapQueueUiState> = _uiState.asStateFlow()
     private var optimizeRouteJob: Job? = null
+    private var manualRouteAddressSaveJob: Job? = null
     private var mapRefreshJob: Job? = null
+    private var currentLocationRefreshJob: Job? = null
+    private var routeCalculationJob: Job? = null
     private var adminAreaDistanceJob: Job? = null
     private var optimizeRouteRequestId = 0
     private var mapRefreshRequestId = 0
+    private var routeCalculationRequestId = 0
     private val naverGeocodeCache = ConcurrentHashMap<String, GeoPoint>()
     private val naverRouteOutcomeCache = ConcurrentHashMap<String, RouteDistanceOutcome>()
+    private var naverRouteDiskCache: NaverRouteDiskCache? = null
 
     init {
         viewModelScope.launch {
@@ -160,9 +173,10 @@ class TmapQueueViewModel(
         address: String,
     ) {
         if (index !in 0 until ManualRouteAddressSlotCount) return
+        val sanitizedAddress = address.normalizeManualAddressFieldInput()
         val updated = _uiState.value.manualRouteAddresses
             .toManualRouteAddressSlots()
-            .updated(index, address)
+            .updated(index, sanitizedAddress)
         _uiState.update {
             it.copy(
                 manualRouteAddresses = updated,
@@ -170,7 +184,26 @@ class TmapQueueViewModel(
                 message = null,
             )
         }
-        viewModelScope.launch {
+        manualRouteAddressSaveJob?.cancel()
+        manualRouteAddressSaveJob = viewModelScope.launch {
+            delay(ManualRouteAddressSaveDebounceMillis)
+            settingsRepository.setTmapManualRouteAddressesText(updated.joinToString("\n"))
+        }
+    }
+
+    fun replaceManualAddresses(addresses: List<String>) {
+        val updated = addresses
+            .toManualRouteAddressSlots()
+            .map { it.normalizeManualAddressFieldInput() }
+        _uiState.update {
+            it.copy(
+                manualRouteAddresses = updated,
+                routePlan = null,
+                message = null,
+            )
+        }
+        manualRouteAddressSaveJob?.cancel()
+        manualRouteAddressSaveJob = viewModelScope.launch {
             settingsRepository.setTmapManualRouteAddressesText(updated.joinToString("\n"))
         }
     }
@@ -206,6 +239,18 @@ class TmapQueueViewModel(
             it.copy(
                 manualRouteAddresses = List(ManualRouteAddressSlotCount) { "" },
                 routePlan = null,
+                routeAddressMap = it.routeAddressMap.copy(
+                    points = emptyList(),
+                    nearestStops = emptyList(),
+                    nearestTotalDistanceKm = null,
+                    nearestTotalDurationText = null,
+                    routeCalculatedAtMillis = null,
+                    routeOriginLatitude = null,
+                    routeOriginLongitude = null,
+                    routeOriginMovedKm = null,
+                    message = "주소를 모두 삭제했습니다.",
+                ),
+                adminAreaDistanceResult = null,
                 message = null,
             )
         }
@@ -366,6 +411,10 @@ class TmapQueueViewModel(
         context: Context,
         addresses: List<String>,
     ) {
+        if (!BuildConfig.IS_NAVI_APP) {
+            _uiState.update { it.copy(message = "방문순서 계산은 CatchPro Navi에서만 사용할 수 있습니다.") }
+            return
+        }
         if (!BuildConfig.FEATURE_NAVI_OPTIMIZATION) {
             _uiState.update { it.copy(message = "최적 순서 계산은 Pro 또는 개인 운행판에서 사용할 수 있습니다.") }
             return
@@ -414,6 +463,7 @@ class TmapQueueViewModel(
                 buildRouteAddressMapState(
                     context = appContext,
                     addresses = requestedAddresses,
+                    includeNearestRoutes = shouldAutoCalculateMapRoutes(),
                 )
             }
             if (requestId != mapRefreshRequestId) return@launch
@@ -421,6 +471,160 @@ class TmapQueueViewModel(
                 it.copy(
                     isRefreshingMap = false,
                     routeAddressMap = mapState,
+                    isResolvingAdminAreaDistance = false,
+                    adminAreaDistanceResult = null,
+                )
+            }
+        }
+    }
+
+    fun refreshCurrentLocation(context: Context) {
+        if (!BuildConfig.IS_NAVI_APP) return
+        if (currentLocationRefreshJob?.isActive == true) return
+        val appContext = context.applicationContext
+        currentLocationRefreshJob = viewModelScope.launch {
+            val locationResult = withContext(Dispatchers.IO) {
+                DeviceLocationProvider(appContext).currentOrLastKnownLocation()
+            }
+            val location = locationResult.location
+            _uiState.update { current ->
+                val currentPoint = location?.let {
+                    GeoPoint(latitude = it.latitude, longitude = it.longitude)
+                }
+                current.copy(
+                    routeAddressMap = current.routeAddressMap.copy(
+                        currentLatitude = location?.latitude ?: current.routeAddressMap.currentLatitude,
+                        currentLongitude = location?.longitude ?: current.routeAddressMap.currentLongitude,
+                        currentAccuracyMeters = location?.accuracyMeters ?: current.routeAddressMap.currentAccuracyMeters,
+                        routeOriginMovedKm = current.routeAddressMap.routeOriginPoint()?.let { origin ->
+                            currentPoint?.let { haversineDistanceKm(origin, it) }
+                        } ?: current.routeAddressMap.routeOriginMovedKm,
+                        points = current.routeAddressMap.points.map { point ->
+                            point.copy(
+                                distanceKmFromCurrentLocation = currentPoint?.let {
+                                    haversineDistanceKm(
+                                        from = it,
+                                        to = GeoPoint(point.latitude, point.longitude),
+                                    )
+                                } ?: point.distanceKmFromCurrentLocation,
+                            )
+                        },
+                        message = when {
+                            location != null &&
+                                current.routeAddressMap.nearestStops.isNotEmpty() &&
+                                current.routeAddressMap.routeOriginMovedKmFrom(currentPoint) >= RouteEtaStaleMoveThresholdKm ->
+                                "현재 위치가 계산 시점보다 이동했습니다. 방문순서/예상시간을 다시 눌러 최신 기준으로 확인하세요."
+                            location != null -> current.routeAddressMap.message
+                            current.routeAddressMap.currentLatitude != null -> current.routeAddressMap.message
+                            else -> locationResult.failureReason ?: current.routeAddressMap.message
+                        },
+                    ),
+                )
+            }
+        }
+    }
+
+    fun calculateNaviFreeVisitOrder(
+        context: Context,
+        addresses: List<String> = _uiState.value.manualRouteAddresses,
+    ) {
+        calculateNaviFreeRoutes(
+            context = context,
+            addresses = addresses,
+            successMessage = "방문순서와 예상시간을 네이버 길찾기로 계산했습니다.",
+        )
+    }
+
+    fun refreshNaviFreeRouteEta(
+        context: Context,
+        addresses: List<String> = _uiState.value.manualRouteAddresses,
+    ) {
+        if (!isNaviFreeBuild()) return
+        val existingOrder = _uiState.value.routeAddressMap.nearestStops
+            .sortedBy { it.order }
+            .map { it.sourceIndex }
+        if (existingOrder.isEmpty()) {
+            _uiState.update {
+                it.copy(
+                    routeAddressMap = it.routeAddressMap.copy(
+                        message = "방문순서 계산을 먼저 눌러 주세요.",
+                    ),
+                )
+            }
+            return
+        }
+        val appContext = context.applicationContext
+        ensureNaverRouteDiskCache(appContext)
+        val requestId = ++routeCalculationRequestId
+        val requestedAddresses = addresses.toManualRouteAddressSlots()
+        routeCalculationJob?.cancel()
+        routeCalculationJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isCalculatingRoute = true,
+                    routeAddressMap = it.routeAddressMap.copy(message = "예상시간을 다시 계산 중입니다."),
+                )
+            }
+            val mapState = withContext(Dispatchers.IO) {
+                buildRouteAddressMapStateForExistingOrder(
+                    context = appContext,
+                    addresses = requestedAddresses,
+                    sourceOrder = existingOrder,
+                )
+            }
+            if (requestId != routeCalculationRequestId) return@launch
+            _uiState.update {
+                it.copy(
+                    isCalculatingRoute = false,
+                    routeAddressMap = mapState.copy(
+                        message = when {
+                            mapState.nearestStops.isNotEmpty() -> "예상시간을 네이버 길찾기로 다시 계산했습니다."
+                            else -> mapState.message ?: "예상시간 계산 결과가 없습니다."
+                        },
+                    ),
+                    isResolvingAdminAreaDistance = false,
+                    adminAreaDistanceResult = null,
+                )
+            }
+        }
+    }
+
+    private fun calculateNaviFreeRoutes(
+        context: Context,
+        addresses: List<String>,
+        successMessage: String,
+    ) {
+        if (!isNaviFreeBuild()) return
+        val appContext = context.applicationContext
+        ensureNaverRouteDiskCache(appContext)
+        val requestId = ++routeCalculationRequestId
+        val requestedAddresses = addresses.toManualRouteAddressSlots()
+        routeCalculationJob?.cancel()
+        routeCalculationJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isCalculatingRoute = true,
+                    message = null,
+                    routeAddressMap = it.routeAddressMap.copy(message = "네이버 길찾기 계산 중입니다."),
+                )
+            }
+            val mapState = withContext(Dispatchers.IO) {
+                buildRouteAddressMapState(
+                    context = appContext,
+                    addresses = requestedAddresses,
+                    includeNearestRoutes = true,
+                )
+            }
+            if (requestId != routeCalculationRequestId) return@launch
+            _uiState.update {
+                it.copy(
+                    isCalculatingRoute = false,
+                    routeAddressMap = mapState.copy(
+                        message = when {
+                            mapState.nearestStops.isNotEmpty() -> successMessage
+                            else -> mapState.message ?: "네이버 길찾기 계산 결과가 없습니다."
+                        },
+                    ),
                     isResolvingAdminAreaDistance = false,
                     adminAreaDistanceResult = null,
                 )
@@ -467,13 +671,10 @@ class TmapQueueViewModel(
             )
         }
 
-        val naverClientId = BuildConfig.NAVER_MAP_NCP_KEY_ID.trim()
-        val naverClientSecret = BuildConfig.NAVER_MAP_NCP_KEY.trim()
+        val naverProxyBaseUrl = BuildConfig.NAVER_PROXY_BASE_URL.trim()
         var naverFailureReason: String? = null
-        if (naverClientId.isNotBlank() && naverClientSecret.isNotBlank()) {
+        if (naverProxyBaseUrl.isNotBlank()) {
             val naverResult = buildNaverRoutePlan(
-                clientId = naverClientId,
-                clientSecret = naverClientSecret,
                 currentLocation = currentLocation,
                 inputs = inputs,
             )
@@ -485,19 +686,20 @@ class TmapQueueViewModel(
 
         return RouteOptimizationResult(
             message = when {
-                naverClientId.isBlank() || naverClientSecret.isBlank() -> "네이버 Maps API 키가 필요합니다."
-                naverFailureReason.isNullOrBlank() -> "네이버 주행거리 계산이 실패했습니다. 네이버 Maps API 권한/인증 정보를 확인해 주세요."
+                naverProxyBaseUrl.isBlank() -> "네이버 프록시 서버 주소가 필요합니다."
+                naverFailureReason.isNullOrBlank() -> "네이버 주행거리 계산이 실패했습니다. 네이버 프록시 서버 상태를 확인해 주세요."
                 else -> "네이버 주행거리 계산 실패: $naverFailureReason"
             },
         )
     }
 
     private fun buildNaverRoutePlan(
-        clientId: String,
-        clientSecret: String,
         currentLocation: DeviceLocation,
         inputs: List<ManualRouteAddressInput>,
     ): NaverRoutePlanResult {
+        if (!BuildConfig.IS_NAVI_APP) {
+            return NaverRoutePlanResult(failureReason = "방문순서 계산은 CatchPro Navi에서만 사용할 수 있습니다.")
+        }
         val currentWaypoint = RouteWaypoint.LatLng(
             latitude = currentLocation.latitude,
             longitude = currentLocation.longitude,
@@ -506,9 +708,8 @@ class TmapQueueViewModel(
 
         val resolvedInputs = inputs.mapNotNull { input ->
             val point = routeDistanceService.geocodeAddress(
-                clientId = clientId,
-                clientSecret = clientSecret,
                 address = input.address,
+                source = "route_optimize_geocode",
             )?.let {
                 GeoPoint(
                     latitude = it.latitude,
@@ -547,17 +748,15 @@ class TmapQueueViewModel(
                         cachedDrivingDistanceKm(
                             cache = naverRouteOutcomeCache,
                             routeDistanceService = routeDistanceService,
-                            clientId = clientId,
-                            clientSecret = clientSecret,
                             origin = previousWaypoint,
                             destination = destinationWaypoint,
+                            source = "route_optimize",
                         )
                     } else {
                         routeDistanceService.drivingDistanceKm(
-                            clientId = clientId,
-                            clientSecret = clientSecret,
                             origin = previousWaypoint,
                             destination = destinationWaypoint,
+                            source = "route_optimize",
                         )
                     }
                     val distanceKm = outcome.distanceKm
@@ -621,6 +820,7 @@ class TmapQueueViewModel(
     private suspend fun buildRouteAddressMapState(
         context: Context,
         addresses: List<String>,
+        includeNearestRoutes: Boolean,
     ): RouteAddressMapUiState {
         val inputs = addresses
             .mapIndexedNotNull { index, value ->
@@ -645,14 +845,14 @@ class TmapQueueViewModel(
                 distanceKmFromCurrentLocation = currentPoint?.let { haversineDistanceKm(it, point) },
             )
         }
-        val nearestStops = if (currentPoint != null) {
+        val nearestStops = if (includeNearestRoutes && currentPoint != null) {
             buildNearestNaverRouteStops(
                 currentPoint = currentPoint,
                 points = points,
                 routeDistanceService = routeDistanceService,
                 routeOutcomeCache = naverRouteOutcomeCache,
-                clientId = BuildConfig.NAVER_MAP_NCP_KEY_ID.trim(),
-                clientSecret = BuildConfig.NAVER_MAP_NCP_KEY.trim(),
+                routeDiskCache = naverRouteDiskCache,
+                proxyConfigured = BuildConfig.NAVER_PROXY_BASE_URL.trim().isNotBlank(),
             )
         } else {
             emptyList()
@@ -670,6 +870,7 @@ class TmapQueueViewModel(
             points.isEmpty() -> "네이버 Geocoding이 주소 좌표를 찾지 못했습니다. API 권한/인증 정보와 주소 형식을 확인해 주세요."
             currentLocation == null -> locationResult.failureReason ?: "현재 위치를 가져오지 못해 거리 계산은 생략했습니다."
             points.size < inputs.size -> "일부 주소는 네이버 Geocoding 좌표를 찾지 못했습니다."
+            !includeNearestRoutes && isNaviFreeBuild() -> "지도 표시 완료. 방문순서/예상시간은 버튼을 눌러 계산하세요."
             else -> null
         }
 
@@ -677,6 +878,18 @@ class TmapQueueViewModel(
             currentLatitude = currentLocation?.latitude,
             currentLongitude = currentLocation?.longitude,
             currentAccuracyMeters = currentLocation?.accuracyMeters,
+            routeCalculatedAtMillis = nearestStops
+                .takeIf { it.isNotEmpty() }
+                ?.let { System.currentTimeMillis() },
+            routeOriginLatitude = nearestStops
+                .takeIf { it.isNotEmpty() }
+                ?.let { currentLocation?.latitude },
+            routeOriginLongitude = nearestStops
+                .takeIf { it.isNotEmpty() }
+                ?.let { currentLocation?.longitude },
+            routeOriginMovedKm = nearestStops
+                .takeIf { it.isNotEmpty() }
+                ?.let { 0.0 },
             points = points,
             nearestStops = nearestStops,
             nearestTotalDistanceKm = nearestTotalDistanceKm,
@@ -685,16 +898,102 @@ class TmapQueueViewModel(
         )
     }
 
+    private suspend fun buildRouteAddressMapStateForExistingOrder(
+        context: Context,
+        addresses: List<String>,
+        sourceOrder: List<Int>,
+    ): RouteAddressMapUiState {
+        if (!BuildConfig.IS_NAVI_APP) {
+            return buildRouteAddressMapState(
+                context = context,
+                addresses = addresses,
+                includeNearestRoutes = false,
+            )
+        }
+        val baseState = buildRouteAddressMapState(
+            context = context,
+            addresses = addresses,
+            includeNearestRoutes = false,
+        )
+        val currentPoint = if (baseState.currentLatitude != null && baseState.currentLongitude != null) {
+            GeoPoint(
+                latitude = baseState.currentLatitude,
+                longitude = baseState.currentLongitude,
+            )
+        } else {
+            null
+        } ?: return baseState
+
+        val pointBySourceIndex = baseState.points.associateBy { it.sourceIndex }
+        val orderedPoints = sourceOrder
+            .distinct()
+            .mapNotNull { pointBySourceIndex[it] }
+        if (orderedPoints.isEmpty()) return baseState.copy(message = "계산할 방문순서가 없습니다.")
+
+        val proxyConfigured = BuildConfig.NAVER_PROXY_BASE_URL.trim().isNotBlank()
+        val stops = mutableListOf<RouteAddressNearestStopUiModel>()
+        var previousPoint = currentPoint
+        var previousLabel = "출발점"
+        orderedPoints.forEach { point ->
+            val pointGeo = GeoPoint(point.latitude, point.longitude)
+            val outcome = if (proxyConfigured) {
+                cachedDrivingDistanceKm(
+                    cache = naverRouteOutcomeCache,
+                    routeDistanceService = routeDistanceService,
+                    origin = previousPoint.toRouteWaypoint(),
+                    destination = pointGeo.toRouteWaypoint(),
+                    source = "navi_eta_refresh",
+                    diskCache = naverRouteDiskCache,
+                )
+            } else {
+                null
+            }
+            val candidate = NearestRouteCandidate(
+                point = point,
+                pointGeo = pointGeo,
+                routeOutcome = outcome,
+                durationSeconds = outcome?.duration?.toDurationSeconds(),
+            )
+            stops += candidate.toNearestStop(
+                order = stops.size + 1,
+                fromLabel = previousLabel,
+                proxyConfigured = proxyConfigured,
+            )
+            previousPoint = pointGeo
+            previousLabel = "주소 ${point.sourceIndex + 1}"
+        }
+        return baseState.copy(
+            nearestStops = stops,
+            routeCalculatedAtMillis = stops
+                .takeIf { it.isNotEmpty() }
+                ?.let { System.currentTimeMillis() },
+            routeOriginLatitude = stops
+                .takeIf { it.isNotEmpty() }
+                ?.let { currentPoint.latitude },
+            routeOriginLongitude = stops
+                .takeIf { it.isNotEmpty() }
+                ?.let { currentPoint.longitude },
+            routeOriginMovedKm = stops
+                .takeIf { it.isNotEmpty() }
+                ?.let { 0.0 },
+            nearestTotalDistanceKm = stops
+                .takeIf { values -> values.isNotEmpty() && values.all { it.legDistanceKm != null } }
+                ?.sumOf { it.legDistanceKm ?: 0.0 },
+            nearestTotalDurationText = stops
+                .takeIf { values -> values.isNotEmpty() && values.all { it.legDurationSeconds != null } }
+                ?.sumOf { it.legDurationSeconds ?: 0 }
+                ?.formatDurationText(),
+        )
+    }
+
     private fun geocodeAddressWithNaver(address: String): GeoPoint? {
-        val naverClientId = BuildConfig.NAVER_MAP_NCP_KEY_ID.trim()
-        val naverClientSecret = BuildConfig.NAVER_MAP_NCP_KEY.trim()
-        if (naverClientId.isBlank() || naverClientSecret.isBlank()) return null
-        val cacheKey = "$naverClientId|${address.normalizeAddressKey()}"
+        val naverProxyBaseUrl = BuildConfig.NAVER_PROXY_BASE_URL.trim()
+        if (naverProxyBaseUrl.isBlank()) return null
+        val cacheKey = address.normalizeAddressKey()
         naverGeocodeCache[cacheKey]?.let { return it }
         val point = routeDistanceService.geocodeAddress(
-            clientId = naverClientId,
-            clientSecret = naverClientSecret,
             address = address,
+            source = "navi_marker",
         )?.let {
             GeoPoint(
                 latitude = it.latitude,
@@ -708,6 +1007,14 @@ class TmapQueueViewModel(
             naverGeocodeCache[cacheKey] = point
         }
         return point
+    }
+
+    private fun ensureNaverRouteDiskCache(context: Context) {
+        if (!isNaviFreeBuild() || naverRouteDiskCache != null) return
+        naverRouteDiskCache = NaverRouteDiskCache(
+            file = File(context.cacheDir, "naver_route_outcome_cache_v1.json"),
+            ttlMillis = NaverRouteDiskCacheTtlMillis,
+        )
     }
 
     private fun resolveAdminAreaQueryPoint(query: String): Pair<String, GeoPoint>? {
@@ -778,8 +1085,29 @@ private const val ManualRouteAddressSlotCount = 6
 private const val MaxRoutePermutationSize = 5
 private const val NearestRouteAddressLimit = 6
 private const val MapRefreshDebounceMillis = 180L
+private const val ManualRouteAddressSaveDebounceMillis = 120L
 private const val MaxNaverGeocodeCacheEntries = 128
 private const val MaxNaverRouteOutcomeCacheEntries = 256
+private const val MaxNaverRouteDiskCacheEntries = 512
+private const val NaverRouteDiskCacheTtlMillis = 30 * 60 * 1000L
+private const val NaviDirectionsLogTag = "CatchProNaviDirections"
+private const val RouteEtaStaleMoveThresholdKm = 0.3
+
+private fun isNaviFreeBuild(): Boolean = BuildConfig.IS_NAVI_APP && BuildConfig.IS_FREE_EDITION
+
+private fun shouldAutoCalculateMapRoutes(): Boolean = BuildConfig.IS_NAVI_APP && !isNaviFreeBuild()
+
+private fun RouteAddressMapUiState.routeOriginPoint(): GeoPoint? {
+    val latitude = routeOriginLatitude ?: return null
+    val longitude = routeOriginLongitude ?: return null
+    return GeoPoint(latitude = latitude, longitude = longitude)
+}
+
+private fun RouteAddressMapUiState.routeOriginMovedKmFrom(currentPoint: GeoPoint?): Double {
+    val origin = routeOriginPoint() ?: return routeOriginMovedKm ?: 0.0
+    val current = currentPoint ?: return routeOriginMovedKm ?: 0.0
+    return haversineDistanceKm(origin, current)
+}
 
 private fun String.toManualRouteAddressSlots(): List<String> =
     split('\n')
@@ -803,6 +1131,11 @@ private fun List<String>.updated(
     mapIndexed { currentIndex, currentValue ->
         if (currentIndex == index) value else currentValue
     }
+
+private fun String.normalizeManualAddressFieldInput(): String =
+    replace(Regex("""[\r\n]+"""), " ")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
 
 private data class CandidateRoutePlan(
     val stops: List<TmapRouteStopUiModel>,
@@ -832,14 +1165,146 @@ private data class NearestRouteCandidate(
     val durationSeconds: Int?,
 )
 
+private class NaverRouteDiskCache(
+    private val file: File,
+    private val ttlMillis: Long,
+) {
+    private val entries = LinkedHashMap<String, DiskCachedRouteOutcome>()
+    private var loaded = false
+
+    fun get(key: String): RouteDistanceOutcome? = synchronized(this) {
+        loadIfNeeded()
+        val entry = entries[key] ?: return@synchronized null
+        if (System.currentTimeMillis() - entry.createdAtMillis > ttlMillis) {
+            entries.remove(key)
+            save()
+            return@synchronized null
+        }
+        entry.toOutcome()
+    }
+
+    fun put(
+        key: String,
+        outcome: RouteDistanceOutcome,
+    ) = synchronized(this) {
+        val distanceKm = outcome.distanceKm ?: return@synchronized
+        loadIfNeeded()
+        entries[key] = DiskCachedRouteOutcome(
+            distanceKm = distanceKm,
+            duration = outcome.duration,
+            failureReason = outcome.failureReason,
+            path = outcome.path.map {
+                RouteAddressRoutePointUiModel(
+                    latitude = it.latitude,
+                    longitude = it.longitude,
+                )
+            },
+            createdAtMillis = System.currentTimeMillis(),
+        )
+        while (entries.size > MaxNaverRouteDiskCacheEntries) {
+            val firstKey = entries.keys.firstOrNull() ?: break
+            entries.remove(firstKey)
+        }
+        save()
+    }
+
+    private fun loadIfNeeded() {
+        if (loaded) return
+        loaded = true
+        if (!file.exists()) return
+        runCatching {
+            val root = JSONObject(file.readText())
+            root.keys().forEach { key ->
+                val value = root.optJSONObject(key) ?: return@forEach
+                val path = value.optJSONArray("path")
+                    ?.let { array ->
+                        (0 until array.length()).mapNotNull { index ->
+                            val item = array.optJSONObject(index) ?: return@mapNotNull null
+                            val latitude = item.optDouble("latitude", Double.NaN)
+                            val longitude = item.optDouble("longitude", Double.NaN)
+                            if (latitude.isNaN() || longitude.isNaN()) {
+                                null
+                            } else {
+                                RouteAddressRoutePointUiModel(latitude = latitude, longitude = longitude)
+                            }
+                        }
+                    }
+                    .orEmpty()
+                entries[key] = DiskCachedRouteOutcome(
+                    distanceKm = value.optDouble("distanceKm"),
+                    duration = value.optString("duration").takeIf { it.isNotBlank() },
+                    failureReason = value.optString("failureReason").takeIf { it.isNotBlank() },
+                    path = path,
+                    createdAtMillis = value.optLong("createdAtMillis"),
+                )
+            }
+        }.onFailure {
+            entries.clear()
+        }
+    }
+
+    private fun save() {
+        runCatching {
+            val root = JSONObject()
+            entries.forEach { (key, value) ->
+                root.put(key, value.toJson())
+            }
+            file.parentFile?.mkdirs()
+            file.writeText(root.toString())
+        }
+    }
+}
+
+private data class DiskCachedRouteOutcome(
+    val distanceKm: Double,
+    val duration: String?,
+    val failureReason: String?,
+    val path: List<RouteAddressRoutePointUiModel>,
+    val createdAtMillis: Long,
+) {
+    fun toOutcome(): RouteDistanceOutcome {
+        return RouteDistanceOutcome(
+            distanceKm = distanceKm,
+            duration = duration,
+            failureReason = failureReason,
+            path = path.map {
+                RouteWaypoint.LatLng(
+                    latitude = it.latitude,
+                    longitude = it.longitude,
+                )
+            },
+        )
+    }
+
+    fun toJson(): JSONObject {
+        return JSONObject()
+            .put("distanceKm", distanceKm)
+            .put("duration", duration.orEmpty())
+            .put("failureReason", failureReason.orEmpty())
+            .put("createdAtMillis", createdAtMillis)
+            .put(
+                "path",
+                path.fold(org.json.JSONArray()) { array, point ->
+                    array.put(
+                        JSONObject()
+                            .put("latitude", point.latitude)
+                            .put("longitude", point.longitude),
+                    )
+                    array
+                },
+            )
+    }
+}
+
 private fun buildNearestNaverRouteStops(
     currentPoint: GeoPoint,
     points: List<RouteAddressMapPointUiModel>,
     routeDistanceService: NaverRouteDistanceService,
     routeOutcomeCache: ConcurrentHashMap<String, RouteDistanceOutcome>,
-    clientId: String,
-    clientSecret: String,
+    routeDiskCache: NaverRouteDiskCache?,
+    proxyConfigured: Boolean,
 ): List<RouteAddressNearestStopUiModel> {
+    if (!BuildConfig.IS_NAVI_APP) return emptyList()
     val remainingPoints = points
         .filter { it.sourceIndex < NearestRouteAddressLimit }
         .toMutableList()
@@ -850,14 +1315,14 @@ private fun buildNearestNaverRouteStops(
     while (remainingPoints.isNotEmpty()) {
         val candidates = remainingPoints.map { point ->
             val pointGeo = GeoPoint(point.latitude, point.longitude)
-            val outcome = if (clientId.isNotBlank() && clientSecret.isNotBlank()) {
+            val outcome = if (proxyConfigured) {
                 cachedDrivingDistanceKm(
                     cache = routeOutcomeCache,
                     routeDistanceService = routeDistanceService,
-                    clientId = clientId,
-                    clientSecret = clientSecret,
                     origin = previousPoint.toRouteWaypoint(),
                     destination = pointGeo.toRouteWaypoint(),
+                    source = "navi_visit_order",
+                    diskCache = routeDiskCache,
                 )
             } else {
                 null
@@ -881,8 +1346,7 @@ private fun buildNearestNaverRouteStops(
         stops += selected.toNearestStop(
             order = stops.size + 1,
             fromLabel = previousLabel,
-            clientId = clientId,
-            clientSecret = clientSecret,
+            proxyConfigured = proxyConfigured,
         )
         remainingPoints.remove(selected.point)
         previousPoint = selected.pointGeo
@@ -895,36 +1359,61 @@ private fun buildNearestNaverRouteStops(
 private fun cachedDrivingDistanceKm(
     cache: ConcurrentHashMap<String, RouteDistanceOutcome>,
     routeDistanceService: NaverRouteDistanceService,
-    clientId: String,
-    clientSecret: String,
     origin: RouteWaypoint.LatLng,
     destination: RouteWaypoint.LatLng,
+    source: String,
+    diskCache: NaverRouteDiskCache? = null,
 ): RouteDistanceOutcome {
-    val cacheKey = routeDistanceCacheKey(clientId, origin, destination)
-    cache[cacheKey]?.let { return it }
+    val cacheKey = routeDistanceCacheKey(origin, destination)
+    cache[cacheKey]?.let {
+        Log.i(
+            NaviDirectionsLogTag,
+            "NAVER_DIRECTIONS_CACHE_HIT source=$source from=${origin.routeCacheCoordinate()} to=${destination.routeCacheCoordinate()} result=${it.distanceKm ?: "unknown"}km/${it.duration ?: "unknown"}",
+        )
+        return it
+    }
+    diskCache?.get(cacheKey)?.let {
+        cache[cacheKey] = it
+        Log.i(
+            NaviDirectionsLogTag,
+            "NAVER_DIRECTIONS_DISK_CACHE_HIT source=$source from=${origin.routeCacheCoordinate()} to=${destination.routeCacheCoordinate()} result=${it.distanceKm ?: "unknown"}km/${it.duration ?: "unknown"}",
+        )
+        return it
+    }
+    Log.i(
+        NaviDirectionsLogTag,
+        "NAVER_DIRECTIONS_CALL source=$source from=${origin.routeCacheCoordinate()} to=${destination.routeCacheCoordinate()} cache=miss",
+    )
     val outcome = routeDistanceService.drivingDistanceKm(
-        clientId = clientId,
-        clientSecret = clientSecret,
         origin = origin,
         destination = destination,
+        source = source,
     )
+    if (outcome.distanceKm == null) {
+        Log.w(
+            NaviDirectionsLogTag,
+            "NAVER_DIRECTIONS_FAILED source=$source from=${origin.routeCacheCoordinate()} to=${destination.routeCacheCoordinate()} reason=${outcome.failureReason.orEmpty().ifBlank { "unknown" }}",
+        )
+    }
     if (outcome.distanceKm != null) {
         if (cache.size > MaxNaverRouteOutcomeCacheEntries) {
             cache.clear()
         }
         cache[cacheKey] = outcome
+        diskCache?.put(cacheKey, outcome)
+        Log.i(
+            NaviDirectionsLogTag,
+            "NAVER_DIRECTIONS_SUCCESS source=$source from=${origin.routeCacheCoordinate()} to=${destination.routeCacheCoordinate()} result=${outcome.distanceKm}km/${outcome.duration ?: "unknown"}",
+        )
     }
     return outcome
 }
 
 private fun routeDistanceCacheKey(
-    clientId: String,
     origin: RouteWaypoint.LatLng,
     destination: RouteWaypoint.LatLng,
 ): String =
     buildString {
-        append(clientId)
-        append('|')
         append(origin.routeCacheCoordinate())
         append('|')
         append(destination.routeCacheCoordinate())
@@ -936,8 +1425,7 @@ private fun RouteWaypoint.LatLng.routeCacheCoordinate(): String =
 private fun NearestRouteCandidate.toNearestStop(
     order: Int,
     fromLabel: String,
-    clientId: String,
-    clientSecret: String,
+    proxyConfigured: Boolean,
 ): RouteAddressNearestStopUiModel {
     return RouteAddressNearestStopUiModel(
         order = order,
@@ -951,7 +1439,7 @@ private fun NearestRouteCandidate.toNearestStop(
         legDurationSeconds = durationSeconds,
         legDurationText = durationSeconds?.formatDurationText(),
         legFailureReason = when {
-            clientId.isBlank() || clientSecret.isBlank() -> "네이버 Maps API 키가 필요합니다."
+            !proxyConfigured -> "네이버 프록시 서버 주소가 필요합니다."
             routeOutcome?.distanceKm == null -> routeOutcome
                 ?.failureReason
                 ?.ifBlank { null }

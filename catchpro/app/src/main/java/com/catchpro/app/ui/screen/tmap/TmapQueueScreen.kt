@@ -17,11 +17,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material.icons.Icons
@@ -33,6 +36,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,6 +61,7 @@ import com.catchpro.app.observation.DeviceLocationProvider
 import com.catchpro.app.observation.NaverRouteDistanceService
 import com.catchpro.app.ui.components.ScreenScaffold
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 @Composable
 fun TmapQueueScreen(
@@ -77,25 +82,69 @@ fun TmapQueueScreen(
     var locationPermissionGranted by remember {
         mutableStateOf(DeviceLocationProvider.hasLocationPermission(context))
     }
+    var naviLocationPermissionRequested by remember { mutableStateOf(false) }
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
     ) { permissions ->
         locationPermissionGranted = permissions.values.any { it } ||
             DeviceLocationProvider.hasLocationPermission(context)
-        viewModel.refreshAddressMap(context, uiState.manualRouteAddresses)
+        if (BuildConfig.IS_NAVI_APP) {
+            viewModel.refreshAddressMap(context, uiState.manualRouteAddresses)
+        }
     }
 
-    LaunchedEffect(uiState.manualRouteAddresses, locationPermissionGranted) {
-        viewModel.refreshAddressMap(context, uiState.manualRouteAddresses)
+    LaunchedEffect(locationPermissionGranted, BuildConfig.IS_FREE_EDITION) {
+        if (BuildConfig.IS_NAVI_APP && !BuildConfig.IS_FREE_EDITION) {
+            viewModel.refreshAddressMap(context, uiState.manualRouteAddresses)
+        }
     }
 
     if (BuildConfig.IS_NAVI_APP) {
+        LaunchedEffect(locationPermissionGranted) {
+            if (!locationPermissionGranted && !naviLocationPermissionRequested) {
+                naviLocationPermissionRequested = true
+                locationPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                    ),
+                )
+            }
+        }
+        LaunchedEffect(locationPermissionGranted) {
+            if (!locationPermissionGranted) return@LaunchedEffect
+            while (true) {
+                viewModel.refreshCurrentLocation(context)
+                delay(NaviCurrentLocationRefreshMillis)
+            }
+        }
         NaviRouteMapContent(
             uiState = uiState,
             naverMapConfigured = BuildConfig.NAVER_MAP_NCP_KEY_ID.isNotBlank(),
+            locationPermissionGranted = locationPermissionGranted,
+            onRequestLocationPermission = {
+                naviLocationPermissionRequested = true
+                locationPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                    ),
+                )
+            },
             onRefreshMap = {
                 viewModel.refreshAddressMap(context, uiState.manualRouteAddresses)
             },
+            onCalculateVisitOrder = {
+                viewModel.calculateNaviFreeVisitOrder(context, uiState.manualRouteAddresses)
+            },
+            onRefreshRouteEta = {
+                viewModel.refreshNaviFreeRouteEta(context, uiState.manualRouteAddresses)
+            },
+            onAddressesApply = { addresses ->
+                viewModel.replaceManualAddresses(addresses)
+                viewModel.refreshAddressMap(context, addresses)
+            },
+            onClearAddresses = viewModel::clearManualAddresses,
             onNaverNavigate = { point ->
                 NaverMapNavigator.launchNavigation(
                     context = context,
@@ -202,7 +251,13 @@ fun TmapQueueScreen(
 private fun NaviRouteMapContent(
     uiState: TmapQueueUiState,
     naverMapConfigured: Boolean,
+    locationPermissionGranted: Boolean,
+    onRequestLocationPermission: () -> Unit,
     onRefreshMap: () -> Unit,
+    onCalculateVisitOrder: () -> Unit,
+    onRefreshRouteEta: () -> Unit,
+    onAddressesApply: (List<String>) -> Unit,
+    onClearAddresses: () -> Unit,
     onNaverNavigate: (RouteAddressMapPointUiModel) -> Unit,
     onTmapNavigate: (String) -> Unit,
     onCompleteAddress: (Int) -> Unit,
@@ -213,6 +268,7 @@ private fun NaviRouteMapContent(
 ) {
     val context = LocalContext.current
     var selectedPoint by remember { mutableStateOf<RouteAddressMapPointUiModel?>(null) }
+    var showAddressEditor by remember { mutableStateOf(false) }
     var launchVoiceAfterPermission by remember { mutableStateOf(false) }
     val voiceRecognizerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
@@ -296,14 +352,33 @@ private fun NaviRouteMapContent(
             }
         }
 
-        NaviMapRefreshButton(
-            isRefreshing = uiState.isRefreshingMap,
-            onRefreshMap = onRefreshMap,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .statusBarsPadding()
-                .padding(8.dp),
-        )
+        if (BuildConfig.IS_FREE_EDITION) {
+            NaviFreeMapControlPanel(
+                isCalculatingRoute = uiState.isCalculatingRoute,
+                onCalculateVisitOrder = onCalculateVisitOrder,
+                onEditAddresses = {
+                    selectedPoint = null
+                    showAddressEditor = true
+                },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(8.dp),
+            )
+        } else {
+            NaviProMapControlPanel(
+                isRefreshing = uiState.isRefreshingMap,
+                onRefreshMap = onRefreshMap,
+                onEditAddresses = {
+                    selectedPoint = null
+                    showAddressEditor = true
+                },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(8.dp),
+            )
+        }
 
         if (BuildConfig.FEATURE_NAVI_OPTIMIZATION) {
             NaviAdminAreaDistancePanel(
@@ -320,21 +395,59 @@ private fun NaviRouteMapContent(
             )
         }
 
-        selectedPoint?.let { point ->
-            NaviSelectedAddressPanel(
-                point = point,
-                nearestStop = uiState.routeAddressMap.nearestStops.firstOrNull {
-                    it.sourceIndex == point.sourceIndex
+        if (!locationPermissionGranted) {
+            Button(
+                onClick = onRequestLocationPermission,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(16.dp),
+            ) {
+                Text("현재 위치 표시 권한 허용")
+            }
+        }
+
+        if (showAddressEditor) {
+            NaviAddressEditorPanel(
+                addresses = uiState.manualRouteAddresses,
+                onApply = { addresses ->
+                    onAddressesApply(addresses)
+                    showAddressEditor = false
                 },
-                onNaverNavigate = { onNaverNavigate(point) },
-                onTmapNavigate = { onTmapNavigate(point.address) },
-                onComplete = { onCompleteAddress(point.sourceIndex) },
+                onClear = onClearAddresses,
+                onClose = { showAddressEditor = false },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .padding(10.dp),
             )
+        } else {
+            selectedPoint?.let { point ->
+                NaviSelectedAddressPanel(
+                    point = point,
+                    nearestStop = uiState.routeAddressMap.nearestStops.firstOrNull {
+                        it.sourceIndex == point.sourceIndex
+                    },
+                    onNaverNavigate = { onNaverNavigate(point) },
+                    onTmapNavigate = { onTmapNavigate(point.address) },
+                    onComplete = { onCompleteAddress(point.sourceIndex) },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(10.dp),
+                )
+            } ?: if (uiState.routeAddressMap.nearestStops.isNotEmpty()) {
+                NaviRouteOrderPanel(
+                    mapState = uiState.routeAddressMap,
+                    onSelectPoint = { selectedPoint = it },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(10.dp),
+                )
+            } else Unit
         }
     }
 }
@@ -449,23 +562,180 @@ private fun String.normalizeSpokenAdminAreaQuery(): String {
 }
 
 @Composable
-private fun NaviMapRefreshButton(
-    isRefreshing: Boolean,
-    onRefreshMap: () -> Unit,
+private fun NaviFreeMapControlPanel(
+    isCalculatingRoute: Boolean,
+    onCalculateVisitOrder: () -> Unit,
+    onEditAddresses: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    OutlinedButton(
-        onClick = onRefreshMap,
-        enabled = !isRefreshing,
-        modifier = modifier.height(36.dp),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-    ) {
-        Text(
-            text = if (isRefreshing) "갱신 중" else "지도 갱신",
-            style = MaterialTheme.typography.labelMedium,
-        )
+    Card(modifier = modifier.width(176.dp)) {
+        Column(
+            modifier = Modifier.padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Button(
+                onClick = onCalculateVisitOrder,
+                enabled = !isCalculatingRoute,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(34.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+            ) {
+                Text(
+                    text = if (isCalculatingRoute) "계산 중" else "방문순서/예상시간",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            OutlinedButton(
+                onClick = onEditAddresses,
+                enabled = !isCalculatingRoute,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(34.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+            ) {
+                Text(
+                    text = "주소 편집",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
     }
 }
+
+@Composable
+private fun NaviProMapControlPanel(
+    isRefreshing: Boolean,
+    onRefreshMap: () -> Unit,
+    onEditAddresses: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier.width(132.dp)) {
+        Column(
+            modifier = Modifier.padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            OutlinedButton(
+                onClick = onRefreshMap,
+                enabled = !isRefreshing,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(34.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+            ) {
+                Text(
+                    text = if (isRefreshing) "갱신 중" else "지도 갱신",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            Button(
+                onClick = onEditAddresses,
+                enabled = !isRefreshing,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(34.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+            ) {
+                Text(
+                    text = "주소 편집",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NaviAddressEditorPanel(
+    addresses: List<String>,
+    onApply: (List<String>) -> Unit,
+    onClear: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var draftAddresses by remember(addresses) { mutableStateOf(addresses.take(6).padNaviAddressSlots()) }
+    val hasAddress = draftAddresses.any { it.isNotBlank() }
+    Card(modifier = modifier) {
+        Column(
+            modifier = Modifier
+                .heightIn(max = 520.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = "주소 직접 입력",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = if (BuildConfig.IS_FREE_EDITION) {
+                            "Navi Free 단독 사용 시 주소 1~6을 직접 입력합니다."
+                        } else {
+                            "AWS 동기화 주소를 임시로 보정하거나 추가 경유지를 직접 입력합니다."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = onClose) {
+                    Text("닫기")
+                }
+            }
+            draftAddresses.take(6).forEachIndexed { index, address ->
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { value ->
+                        draftAddresses = draftAddresses.mapIndexed { currentIndex, currentValue ->
+                            if (currentIndex == index) value else currentValue
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("주소 ${index + 1}") },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.None,
+                        keyboardType = KeyboardType.Text,
+                    ),
+                    minLines = 1,
+                    maxLines = 2,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        draftAddresses = List(6) { "" }
+                        onClear()
+                    },
+                    enabled = hasAddress,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("전체 삭제")
+                }
+                Button(
+                    onClick = { onApply(draftAddresses) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("지도 반영")
+                }
+            }
+        }
+    }
+}
+
+private fun List<String>.padNaviAddressSlots(): List<String> =
+    take(6) + List((6 - size).coerceAtLeast(0)) { "" }
 
 @Composable
 private fun NaviSelectedAddressPanel(
@@ -555,7 +825,10 @@ private fun NaviRouteOrderPanel(
 ) {
     Card(modifier = modifier) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier
+                .heightIn(max = 300.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
@@ -606,7 +879,27 @@ private fun NaviRouteOrderPanel(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            mapState.nearestStops.take(3).forEach { stop ->
+            if (mapState.nearestStops.isNotEmpty()) {
+                Text(
+                    text = buildString {
+                        val movedKm = mapState.routeOriginMovedKm ?: 0.0
+                        if (movedKm >= 0.3) {
+                            append("계산 후 현재 위치가 ")
+                            append(movedKm.formatDistanceKm())
+                            append("km 이동했습니다. 최신 예상시간은 다시 계산하세요.")
+                        } else {
+                            append("예상시간 기준: 계산 시점의 출발점")
+                        }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if ((mapState.routeOriginMovedKm ?: 0.0) >= 0.3) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            mapState.nearestStops.forEach { stop ->
                 val point = mapState.points.firstOrNull { it.sourceIndex == stop.sourceIndex }
                 OutlinedButton(
                     onClick = { point?.let(onSelectPoint) },
@@ -1163,3 +1456,5 @@ private fun Double.formatDistanceKm(): String {
 private fun manualRouteAddressLabel(index: Int): String {
     return "주소 ${index + 1}"
 }
+
+private const val NaviCurrentLocationRefreshMillis = 10_000L
