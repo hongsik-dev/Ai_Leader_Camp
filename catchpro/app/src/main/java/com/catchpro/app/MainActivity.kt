@@ -42,7 +42,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        routeAddressCloudSyncManager.start()
+        if (BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC) {
+            routeAddressCloudSyncManager.start()
+        }
         handleInsungDebugRouteAddressIntent(intent)
 
         setContent {

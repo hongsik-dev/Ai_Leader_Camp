@@ -219,6 +219,7 @@ class TmapQueueViewModel(
     }
 
     fun setRouteAddressCloudSyncEnabled(enabled: Boolean) {
+        if (!BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC) return
         viewModelScope.launch {
             settingsRepository.setRouteAddressCloudSyncEnabled(enabled)
         }
@@ -240,6 +241,7 @@ class TmapQueueViewModel(
     }
 
     fun resolveAdminAreaDistance(queryOverride: String? = null) {
+        if (!BuildConfig.FEATURE_NAVI_OPTIMIZATION) return
         val query = queryOverride?.trim().orEmpty().ifBlank {
             _uiState.value.adminAreaQueryText.trim()
         }
@@ -364,6 +366,10 @@ class TmapQueueViewModel(
         context: Context,
         addresses: List<String>,
     ) {
+        if (!BuildConfig.FEATURE_NAVI_OPTIMIZATION) {
+            _uiState.update { it.copy(message = "최적 순서 계산은 Pro 또는 개인 운행판에서 사용할 수 있습니다.") }
+            return
+        }
         val appContext = context.applicationContext
         val requestId = ++optimizeRouteRequestId
         optimizeRouteJob?.cancel()

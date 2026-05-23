@@ -159,13 +159,15 @@ fun TmapQueueScreen(
                 },
             )
 
-            RouteAddressCloudSyncCard(
-                enabled = uiState.routeAddressCloudSyncEnabled,
-                roomCode = uiState.routeAddressCloudSyncRoomCode,
-                status = uiState.routeAddressCloudSyncStatus,
-                onEnabledChange = viewModel::setRouteAddressCloudSyncEnabled,
-                onRoomCodeChange = viewModel::setRouteAddressCloudSyncRoomCode,
-            )
+            if (BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC) {
+                RouteAddressCloudSyncCard(
+                    enabled = uiState.routeAddressCloudSyncEnabled,
+                    roomCode = uiState.routeAddressCloudSyncRoomCode,
+                    status = uiState.routeAddressCloudSyncStatus,
+                    onEnabledChange = viewModel::setRouteAddressCloudSyncEnabled,
+                    onRoomCodeChange = viewModel::setRouteAddressCloudSyncRoomCode,
+                )
+            }
 
             uiState.message?.let { message ->
                 RouteMessageCard(message = message)
@@ -259,7 +261,7 @@ private fun NaviRouteMapContent(
     }
 
     LaunchedEffect(uiState.routeAddressCloudSyncEnabled) {
-        if (!uiState.routeAddressCloudSyncEnabled) {
+        if (BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC && !uiState.routeAddressCloudSyncEnabled) {
             onCloudEnabledChange(true)
         }
     }
@@ -303,18 +305,20 @@ private fun NaviRouteMapContent(
                 .padding(8.dp),
         )
 
-        NaviAdminAreaDistancePanel(
-            query = uiState.adminAreaQueryText,
-            isResolving = uiState.isResolvingAdminAreaDistance,
-            result = uiState.adminAreaDistanceResult,
-            onQueryChange = onAdminAreaQueryChange,
-            onResolve = onResolveAdminAreaDistance,
-            onVoiceInput = ::requestAdminAreaVoiceInput,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .statusBarsPadding()
-                .padding(start = 8.dp, top = 8.dp, end = 92.dp),
-        )
+        if (BuildConfig.FEATURE_NAVI_OPTIMIZATION) {
+            NaviAdminAreaDistancePanel(
+                query = uiState.adminAreaQueryText,
+                isResolving = uiState.isResolvingAdminAreaDistance,
+                result = uiState.adminAreaDistanceResult,
+                onQueryChange = onAdminAreaQueryChange,
+                onResolve = onResolveAdminAreaDistance,
+                onVoiceInput = ::requestAdminAreaVoiceInput,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(start = 8.dp, top = 8.dp, end = 92.dp),
+            )
+        }
 
         selectedPoint?.let { point ->
             NaviSelectedAddressPanel(

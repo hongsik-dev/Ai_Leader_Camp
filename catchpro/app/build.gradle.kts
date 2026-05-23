@@ -43,12 +43,105 @@ android {
             dimension = "deviceRole"
             applicationId = "com.catchpro.app"
             buildConfigField("boolean", "IS_NAVI_APP", "false")
+            buildConfigField("String", "CATCHPRO_EDITION", "\"personal\"")
+            buildConfigField("boolean", "IS_PERSONAL_EDITION", "true")
+            buildConfigField("boolean", "IS_FREE_EDITION", "false")
+            buildConfigField("boolean", "IS_PRO_EDITION", "false")
+            buildConfigField("boolean", "FEATURE_AUTO_CONFIRM", "true")
+            buildConfigField("boolean", "FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM", "true")
+            buildConfigField("boolean", "FEATURE_ROUTE_ADDRESS_CLOUD_SYNC", "true")
+            buildConfigField("boolean", "FEATURE_NAVI_OPTIMIZATION", "true")
         }
         create("navi") {
             dimension = "deviceRole"
             applicationId = "com.catchpro.app"
             versionNameSuffix = "-navi"
             buildConfigField("boolean", "IS_NAVI_APP", "true")
+            buildConfigField("String", "CATCHPRO_EDITION", "\"personal\"")
+            buildConfigField("boolean", "IS_PERSONAL_EDITION", "true")
+            buildConfigField("boolean", "IS_FREE_EDITION", "false")
+            buildConfigField("boolean", "IS_PRO_EDITION", "false")
+            buildConfigField("boolean", "FEATURE_AUTO_CONFIRM", "false")
+            buildConfigField("boolean", "FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM", "false")
+            buildConfigField("boolean", "FEATURE_ROUTE_ADDRESS_CLOUD_SYNC", "true")
+            buildConfigField("boolean", "FEATURE_NAVI_OPTIMIZATION", "true")
+        }
+        create("insungFree") {
+            dimension = "deviceRole"
+            applicationId = "com.catchpro.insung.free"
+            versionNameSuffix = "-insung-free"
+            buildConfigField("boolean", "IS_NAVI_APP", "false")
+            buildConfigField("String", "CATCHPRO_EDITION", "\"free\"")
+            buildConfigField("boolean", "IS_PERSONAL_EDITION", "false")
+            buildConfigField("boolean", "IS_FREE_EDITION", "true")
+            buildConfigField("boolean", "IS_PRO_EDITION", "false")
+            buildConfigField("boolean", "FEATURE_AUTO_CONFIRM", "false")
+            buildConfigField("boolean", "FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM", "false")
+            buildConfigField("boolean", "FEATURE_ROUTE_ADDRESS_CLOUD_SYNC", "false")
+            buildConfigField("boolean", "FEATURE_NAVI_OPTIMIZATION", "false")
+        }
+        create("insungPro") {
+            dimension = "deviceRole"
+            applicationId = "com.catchpro.insung.pro"
+            versionNameSuffix = "-insung-pro"
+            buildConfigField("boolean", "IS_NAVI_APP", "false")
+            buildConfigField("String", "CATCHPRO_EDITION", "\"pro\"")
+            buildConfigField("boolean", "IS_PERSONAL_EDITION", "false")
+            buildConfigField("boolean", "IS_FREE_EDITION", "false")
+            buildConfigField("boolean", "IS_PRO_EDITION", "true")
+            buildConfigField("boolean", "FEATURE_AUTO_CONFIRM", "true")
+            buildConfigField("boolean", "FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM", "false")
+            buildConfigField("boolean", "FEATURE_ROUTE_ADDRESS_CLOUD_SYNC", "true")
+            buildConfigField("boolean", "FEATURE_NAVI_OPTIMIZATION", "true")
+        }
+        create("naviFree") {
+            dimension = "deviceRole"
+            applicationId = "com.catchpro.navi.free"
+            versionNameSuffix = "-navi-free"
+            buildConfigField("boolean", "IS_NAVI_APP", "true")
+            buildConfigField("String", "CATCHPRO_EDITION", "\"free\"")
+            buildConfigField("boolean", "IS_PERSONAL_EDITION", "false")
+            buildConfigField("boolean", "IS_FREE_EDITION", "true")
+            buildConfigField("boolean", "IS_PRO_EDITION", "false")
+            buildConfigField("boolean", "FEATURE_AUTO_CONFIRM", "false")
+            buildConfigField("boolean", "FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM", "false")
+            buildConfigField("boolean", "FEATURE_ROUTE_ADDRESS_CLOUD_SYNC", "false")
+            buildConfigField("boolean", "FEATURE_NAVI_OPTIMIZATION", "false")
+        }
+        create("naviPro") {
+            dimension = "deviceRole"
+            applicationId = "com.catchpro.navi.pro"
+            versionNameSuffix = "-navi-pro"
+            buildConfigField("boolean", "IS_NAVI_APP", "true")
+            buildConfigField("String", "CATCHPRO_EDITION", "\"pro\"")
+            buildConfigField("boolean", "IS_PERSONAL_EDITION", "false")
+            buildConfigField("boolean", "IS_FREE_EDITION", "false")
+            buildConfigField("boolean", "IS_PRO_EDITION", "true")
+            buildConfigField("boolean", "FEATURE_AUTO_CONFIRM", "false")
+            buildConfigField("boolean", "FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM", "false")
+            buildConfigField("boolean", "FEATURE_ROUTE_ADDRESS_CLOUD_SYNC", "true")
+            buildConfigField("boolean", "FEATURE_NAVI_OPTIMIZATION", "true")
+        }
+    }
+
+    sourceSets {
+        getByName("insungFree") {
+            java.srcDir("src/insung/java")
+            kotlin.srcDir("src/insung/java")
+        }
+        getByName("insungPro") {
+            java.srcDir("src/insung/java")
+            kotlin.srcDir("src/insung/java")
+        }
+        getByName("naviFree") {
+            java.srcDir("src/navi/java")
+            kotlin.srcDir("src/navi/java")
+            manifest.srcFile("src/navi/AndroidManifest.xml")
+        }
+        getByName("naviPro") {
+            java.srcDir("src/navi/java")
+            kotlin.srcDir("src/navi/java")
+            manifest.srcFile("src/navi/AndroidManifest.xml")
         }
     }
 
@@ -120,6 +213,8 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     add("naviImplementation", "com.naver.maps:map-sdk:3.23.2")
+    add("naviFreeImplementation", "com.naver.maps:map-sdk:3.23.2")
+    add("naviProImplementation", "com.naver.maps:map-sdk:3.23.2")
 
     implementation("com.google.dagger:hilt-android:2.59.2")
     ksp("com.google.dagger:hilt-android-compiler:2.59.2")

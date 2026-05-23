@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">인성 CatchPro Free</string>
+    <string name="accessibility_service_label">인성 CatchPro Free</string>
+    <string name="accessibility_service_description">인성데이터 화면을 읽어 오더 조건과 주소 확인을 보조합니다.</string>
+</resources>
