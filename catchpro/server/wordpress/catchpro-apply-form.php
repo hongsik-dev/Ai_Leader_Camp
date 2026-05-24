@@ -2,7 +2,7 @@
 /**
  * Plugin Name: CatchPro Apply Form
  * Description: CatchPro Pro 신청 폼과 관리자 저장소를 제공합니다.
- * Version: 1.0.2
+ * Version: 1.0.3
  * Author: CatchPro
  */
 
@@ -136,6 +136,7 @@ function catchpro_apply_render_form($raw_atts = []): string
     ob_start();
     ?>
     <script>
+        document.documentElement.classList.add('catchpro-js');
         document.body.classList.add('catchpro-apply-page');
     </script>
     <style>
@@ -299,24 +300,32 @@ function catchpro_apply_render_form($raw_atts = []): string
         .catchpro-apply__grid {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 14px;
+            gap: 16px;
             margin: 28px 0 36px;
         }
         .catchpro-apply__panel {
             border: 1px solid var(--cp-line);
             border-radius: var(--cp-radius);
-            padding: 20px;
+            padding: 22px;
             background: #fff;
             box-shadow: none;
+            opacity: 1;
+            transform: none;
+            transition: opacity 0.5s ease, transform 0.5s ease, border-color 0.18s ease, background-color 0.18s ease;
+        }
+        .catchpro-js .catchpro-apply__panel {
             opacity: 0;
-            animation: catchproFadeUp 0.52s ease forwards;
-            transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+            transform: translateY(24px);
         }
-        .catchpro-apply__panel:nth-child(2) {
-            animation-delay: 0.06s;
+        .catchpro-js .catchpro-apply__panel.is-visible {
+            opacity: 1;
+            transform: translateY(0);
         }
-        .catchpro-apply__panel:nth-child(3) {
-            animation-delay: 0.12s;
+        .catchpro-js .catchpro-apply__panel:nth-child(2) {
+            transition-delay: 0.08s;
+        }
+        .catchpro-js .catchpro-apply__panel:nth-child(3) {
+            transition-delay: 0.16s;
         }
         .catchpro-apply__panel:hover {
             transform: translateY(-2px);
@@ -325,14 +334,33 @@ function catchpro_apply_render_form($raw_atts = []): string
         }
         .catchpro-apply__panel h2,
         .catchpro-apply__panel h3 {
-            margin: 0 0 8px;
-            font-size: 20px;
+            margin: 0 0 10px;
+            font-size: 22px;
+            line-height: 1.32;
             letter-spacing: 0;
         }
         .catchpro-apply__panel p {
             margin: 0;
             color: var(--cp-muted);
-            font-size: 15px;
+            font-size: 16px;
+            line-height: 1.72;
+        }
+        .catchpro-apply__feature-label {
+            display: inline-flex;
+            align-items: center;
+            min-height: 26px;
+            margin-bottom: 12px;
+            padding: 0 10px;
+            border: 1px solid rgba(45, 85, 255, 0.2);
+            border-radius: 999px;
+            background: #f4f6ff;
+            color: var(--cp-blue);
+            font-size: 13px;
+            font-weight: 900;
+        }
+        .catchpro-apply__accent {
+            color: var(--cp-blue);
+            font-weight: 900;
         }
         .catchpro-apply__section-title {
             margin: 0 0 10px;
@@ -577,16 +605,19 @@ function catchpro_apply_render_form($raw_atts = []): string
                 </p>
                 <div class="catchpro-apply__grid">
                     <article class="catchpro-apply__panel">
+                        <span class="catchpro-apply__feature-label">오더확정</span>
                         <h3>인성 CatchPro Pro</h3>
-                        <p>인성앱을 사용하는 폰에서 조건 확인과 확정 동작을 빠르게 보조합니다.</p>
+                        <p>인성앱을 사용하는 폰에서 조건 확인과 <span class="catchpro-apply__accent">오더확정</span> 동작을 빠르게 보조합니다.</p>
                     </article>
                     <article class="catchpro-apply__panel">
+                        <span class="catchpro-apply__feature-label">방문순서</span>
                         <h3>CatchPro Navi Pro</h3>
-                        <p>주소 동기화, 방문순서, 네비 실행을 지도 중심 화면으로 제공합니다.</p>
+                        <p><span class="catchpro-apply__accent">주소 동기화</span>, <span class="catchpro-apply__accent">방문순서</span>, 네비 실행을 지도 중심 화면으로 제공합니다.</p>
                     </article>
                     <article class="catchpro-apply__panel">
+                        <span class="catchpro-apply__feature-label">설치안내</span>
                         <h3>설치 상담</h3>
-                        <p>사용 기기와 운행 지역을 확인한 뒤 설치 순서와 이용 방법을 안내합니다.</p>
+                        <p>사용 기기와 운행 지역을 확인한 뒤 <span class="catchpro-apply__accent">설치 순서</span>와 이용 방법을 안내합니다.</p>
                     </article>
                 </div>
             </section>
@@ -681,6 +712,38 @@ function catchpro_apply_render_form($raw_atts = []): string
             </section>
         </div>
     </div>
+    <script>
+        (function () {
+            var panels = document.querySelectorAll('.catchpro-apply__panel');
+            if (!panels.length) {
+                return;
+            }
+
+            if (!('IntersectionObserver' in window)) {
+                panels.forEach(function (panel) {
+                    panel.classList.add('is-visible');
+                });
+                return;
+            }
+
+            var observer = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    if (!entry.isIntersecting) {
+                        return;
+                    }
+                    entry.target.classList.add('is-visible');
+                    observer.unobserve(entry.target);
+                });
+            }, {
+                rootMargin: '0px 0px -10% 0px',
+                threshold: 0.2
+            });
+
+            panels.forEach(function (panel) {
+                observer.observe(panel);
+            });
+        })();
+    </script>
     <?php
     return (string) ob_get_clean();
 }
