@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.catchpro.app.BuildConfig
+import com.catchpro.app.data.license.LicenseRepository
+import com.catchpro.app.data.license.LicenseSnapshot
 import com.catchpro.app.data.model.AppSettings
 import com.catchpro.app.data.sync.RouteAddressSyncPayload
 import com.catchpro.app.feature.CatchProFeatureGate
@@ -16,6 +18,7 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
 private const val ManualRouteAddressSlotCount = 6
@@ -24,15 +27,20 @@ private const val ManualRouteAddressSlotCount = 6
 class SettingsRepository @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val dataStore: DataStore<Preferences>,
+    private val licenseRepository: LicenseRepository,
 ) {
-    val settings: Flow<AppSettings> = dataStore.data.map { preferences ->
+    val settings: Flow<AppSettings> = combine(
+        dataStore.data,
+        licenseRepository.snapshots(),
+    ) { preferences, licenseSnapshot ->
         val normalizedRouteAddresses = preferences[TmapManualRouteAddressesTextKey]
             .orEmpty()
             .normalizeManualRouteAddressesText()
-        val autoConfirmAvailable = CatchProFeatureGate.autoConfirmAvailable(context)
-        val autoDetailAvailable = CatchProFeatureGate.experimentalAutoDetailConfirmAvailable(context)
-        val cloudSyncAvailable = CatchProFeatureGate.routeAddressCloudSyncAvailable(context)
-        val naviOptimizationAvailable = CatchProFeatureGate.naviOptimizationAvailable(context)
+        val entitlementSatisfied = licenseSnapshot.entitlementSatisfiedNow()
+        val autoConfirmAvailable = BuildConfig.FEATURE_AUTO_CONFIRM && entitlementSatisfied
+        val autoDetailAvailable = BuildConfig.FEATURE_EXPERIMENTAL_AUTO_DETAIL_CONFIRM && entitlementSatisfied
+        val cloudSyncAvailable = BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC && entitlementSatisfied
+        val naviOptimizationAvailable = BuildConfig.FEATURE_NAVI_OPTIMIZATION && entitlementSatisfied
         val personalEdition = BuildConfig.IS_PERSONAL_EDITION
         AppSettings(
             clientBlacklistText = (preferences[ClientBlacklistTextKey] ?: DefaultClientBlacklistText)
@@ -70,6 +78,7 @@ class SettingsRepository @Inject constructor(
             routeAddressCloudSyncServerUrl = preferences[RouteAddressCloudSyncServerUrlKey]
                 ?.trim()
                 ?.takeIf(String::isNotBlank)
+                ?.normalizeRouteAddressCloudSyncServerUrl()
                 ?: DefaultRouteAddressCloudSyncServerUrl,
             primaryAutoConfirmEnabled = autoConfirmAvailable && (preferences[AutoConfirmEnabledKey] ?: false),
             primaryDestinationKeywords = preferences[AutoConfirmDestinationKeywordsKey].orEmpty(),
@@ -523,7 +532,7 @@ class SettingsRepository @Inject constructor(
         val RouteAddressCloudSyncServerUrlKey = stringPreferencesKey("route_address_cloud_sync_server_url")
         const val RouteAddressCloudSyncRoomCodeLength = 6
         const val DefaultRouteAddressCloudSyncRoomCode = "250501"
-        const val DefaultRouteAddressCloudSyncServerUrl = "ws://43.200.8.165/catchpro-sync"
+        const val DefaultRouteAddressCloudSyncServerUrl = "wss://hongsik.blog/catchpro-sync"
         val AutoConfirmDestinationKeywordsKey = stringPreferencesKey("auto_confirm_destination_keywords")
         val PrimaryAutoConfirmExcludedKeywordsTextKey =
             stringPreferencesKey("primary_auto_confirm_excluded_keywords_text")
@@ -680,6 +689,12 @@ internal fun String.normalizeManualRouteAddressesText(): String =
     manualRouteAddressSlots()
         .joinToString("\n")
 
+private fun LicenseSnapshot.entitlementSatisfiedNow(): Boolean {
+    if (!BuildConfig.IS_PRO_EDITION || BuildConfig.IS_PERSONAL_EDITION) return true
+    val now = System.currentTimeMillis()
+    return active || graceUntilMillis > now
+}
+
 internal fun String.manualRouteAddressSlots(): List<String> =
     split('\n')
         .map { line ->
@@ -713,6 +728,16 @@ private fun String.keywordEntries(): List<String> =
 private fun String.sanitizeRouteAddressCloudSyncRoomCode(): String =
     filter(Char::isDigit)
         .take(6)
+
+private fun String.normalizeRouteAddressCloudSyncServerUrl(): String {
+    val trimmed = trim().trimEnd('/')
+    return when (trimmed) {
+        "ws://43.200.8.165/catchpro-sync",
+        "ws://43.201.95.165/catchpro-sync",
+        "wss://43.201.95.165/catchpro-sync" -> "wss://hongsik.blog/catchpro-sync"
+        else -> trimmed
+    }
+}
 
 private fun String.normalizeRouteAddressKey(): String =
     lowercase(Locale.KOREAN)

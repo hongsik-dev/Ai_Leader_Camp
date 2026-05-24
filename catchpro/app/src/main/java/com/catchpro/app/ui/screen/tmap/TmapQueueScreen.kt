@@ -210,6 +210,7 @@ fun TmapQueueScreen(
 
             if (BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC) {
                 RouteAddressCloudSyncCard(
+                    available = uiState.routeAddressCloudSyncFeatureAvailable,
                     enabled = uiState.routeAddressCloudSyncEnabled,
                     roomCode = uiState.routeAddressCloudSyncRoomCode,
                     status = uiState.routeAddressCloudSyncStatus,
@@ -352,47 +353,45 @@ private fun NaviRouteMapContent(
             }
         }
 
-        if (BuildConfig.IS_FREE_EDITION) {
-            NaviFreeMapControlPanel(
-                isCalculatingRoute = uiState.isCalculatingRoute,
-                onCalculateVisitOrder = onCalculateVisitOrder,
-                onEditAddresses = {
-                    selectedPoint = null
-                    showAddressEditor = true
-                },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .statusBarsPadding()
-                    .padding(8.dp),
-            )
-        } else {
-            NaviProMapControlPanel(
-                isRefreshing = uiState.isRefreshingMap,
-                onRefreshMap = onRefreshMap,
-                onEditAddresses = {
-                    selectedPoint = null
-                    showAddressEditor = true
-                },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .statusBarsPadding()
-                    .padding(8.dp),
-            )
-        }
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (BuildConfig.FEATURE_NAVI_OPTIMIZATION) {
+                NaviAdminAreaDistancePanel(
+                    query = uiState.adminAreaQueryText,
+                    isResolving = uiState.isResolvingAdminAreaDistance,
+                    result = uiState.adminAreaDistanceResult,
+                    onQueryChange = onAdminAreaQueryChange,
+                    onResolve = onResolveAdminAreaDistance,
+                    onVoiceInput = ::requestAdminAreaVoiceInput,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
-        if (BuildConfig.FEATURE_NAVI_OPTIMIZATION) {
-            NaviAdminAreaDistancePanel(
-                query = uiState.adminAreaQueryText,
-                isResolving = uiState.isResolvingAdminAreaDistance,
-                result = uiState.adminAreaDistanceResult,
-                onQueryChange = onAdminAreaQueryChange,
-                onResolve = onResolveAdminAreaDistance,
-                onVoiceInput = ::requestAdminAreaVoiceInput,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .statusBarsPadding()
-                    .padding(start = 8.dp, top = 8.dp, end = 92.dp),
-            )
+            if (BuildConfig.IS_FREE_EDITION) {
+                NaviFreeMapControlPanel(
+                    isCalculatingRoute = uiState.isCalculatingRoute,
+                    onCalculateVisitOrder = onCalculateVisitOrder,
+                    onEditAddresses = {
+                        selectedPoint = null
+                        showAddressEditor = true
+                    },
+                )
+            } else {
+                NaviProMapControlPanel(
+                    isRefreshing = uiState.isRefreshingMap,
+                    onRefreshMap = onRefreshMap,
+                    onEditAddresses = {
+                        selectedPoint = null
+                        showAddressEditor = true
+                    },
+                )
+            }
         }
 
         if (!locationPermissionGranted) {
@@ -1140,6 +1139,7 @@ private fun NearestNaverRouteSummary(
 
 @Composable
 private fun RouteAddressCloudSyncCard(
+    available: Boolean,
     enabled: Boolean,
     roomCode: String,
     status: RouteAddressCloudSyncStatus,
@@ -1169,6 +1169,8 @@ private fun RouteAddressCloudSyncCard(
                     Text(
                         text = if (status.connected) {
                             "연결됨 · 방 ${status.roomCode}"
+                        } else if (!available) {
+                            "Pro 라이선스 인증 후 사용할 수 있습니다."
                         } else {
                             status.message
                         },
@@ -1177,7 +1179,8 @@ private fun RouteAddressCloudSyncCard(
                     )
                 }
                 Switch(
-                    checked = enabled,
+                    checked = available && enabled,
+                    enabled = available,
                     onCheckedChange = onEnabledChange,
                 )
             }
@@ -1185,7 +1188,7 @@ private fun RouteAddressCloudSyncCard(
                 value = roomCode,
                 onValueChange = onRoomCodeChange,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !enabled,
+                enabled = available && !enabled,
                 label = { Text("동기화 방 코드") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
@@ -1193,7 +1196,11 @@ private fun RouteAddressCloudSyncCard(
                 ),
             )
             Text(
-                text = "두 휴대폰에 같은 6자리 코드를 입력하고 스위치를 켜면, 이 화면의 주소 1~6이 자동으로 동기화됩니다.",
+                text = if (available) {
+                    "두 휴대폰에 같은 6자리 코드를 입력하고 스위치를 켜면, 이 화면의 주소 1~6이 자동으로 동기화됩니다."
+                } else {
+                    "설정 탭에서 Pro 라이선스를 인증한 뒤 다시 켜 주세요."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1260,26 +1267,21 @@ private fun ManualRoutePlannerCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(
-                onClick = onOptimizeRoute,
-                enabled = routeManagementEnabled && filledAddressCount >= 1 && !isOptimizing,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (isOptimizing) "계산 중..." else "최적 순서 계산")
-            }
-            OutlinedButton(
-                onClick = onClear,
-                enabled = routeManagementEnabled && addresses.any { it.isNotBlank() },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("주소 초기화")
-            }
-            if (!routeManagementEnabled) {
-                Text(
-                    text = "방문 완료와 주소 초기화는 CatchPro Navi에서 처리하면 이 화면에도 자동 반영됩니다.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            if (routeManagementEnabled) {
+                Button(
+                    onClick = onOptimizeRoute,
+                    enabled = filledAddressCount >= 1 && !isOptimizing,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (isOptimizing) "계산 중..." else "최적 순서 계산")
+                }
+                OutlinedButton(
+                    onClick = onClear,
+                    enabled = addresses.any { it.isNotBlank() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("주소 초기화")
+                }
             }
         }
     }
@@ -1322,12 +1324,14 @@ private fun ManualAddressBlock(
             ) {
                 Text("TMAP")
             }
-            OutlinedButton(
-                onClick = { onComplete?.invoke() },
-                enabled = address.isNotBlank() && onComplete != null,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text("완료")
+            if (onComplete != null) {
+                OutlinedButton(
+                    onClick = onComplete,
+                    enabled = address.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("완료")
+                }
             }
         }
     }

@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
+import com.catchpro.app.data.license.LicenseRepository
 import com.catchpro.app.data.repository.AccessibilityCaptureRepository
 import com.catchpro.app.data.repository.OrderEventRepository
 import com.catchpro.app.data.repository.SettingsRepository
@@ -39,9 +40,17 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var routeAddressCloudSyncManager: RouteAddressCloudSyncManager
 
+    @Inject
+    lateinit var licenseRepository: LicenseRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (BuildConfig.IS_PRO_EDITION) {
+            lifecycleScope.launch {
+                licenseRepository.refreshIfNeeded()
+            }
+        }
         if (BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC) {
             routeAddressCloudSyncManager.start()
         }
@@ -56,6 +65,7 @@ class MainActivity : ComponentActivity() {
                     tmapQueueRepository = tmapQueueRepository,
                     routeDistanceService = routeDistanceService,
                     routeAddressCloudSyncManager = routeAddressCloudSyncManager,
+                    licenseRepository = licenseRepository,
                 )
             }
         }

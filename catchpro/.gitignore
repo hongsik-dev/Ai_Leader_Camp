@@ -28,3 +28,5 @@ build/
 /tmp_device_logs/
 /tmp_naver_aar/
 /wp-content-seed/
+
+server/sync/node_modules/

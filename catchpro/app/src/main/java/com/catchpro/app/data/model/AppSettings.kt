@@ -20,7 +20,7 @@ data class AppSettings(
     val tmapManualRouteAddressesText: String = "",
     val routeAddressCloudSyncEnabled: Boolean = true,
     val routeAddressCloudSyncRoomCode: String = "250501",
-    val routeAddressCloudSyncServerUrl: String = "ws://43.200.8.165/catchpro-sync",
+    val routeAddressCloudSyncServerUrl: String = "wss://hongsik.blog/catchpro-sync",
     val primaryAutoConfirmEnabled: Boolean = false,
     val primaryDestinationKeywords: String = "",
     val primaryAutoConfirmExcludedKeywordsText: String =

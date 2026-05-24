@@ -12,14 +12,20 @@ val catchProVersionName = "0.1.11"
 
 android {
     val localProperties = Properties().apply {
-        val localPropertiesFile = rootProject.file("local.properties")
-        if (localPropertiesFile.exists()) {
-            localPropertiesFile.inputStream().use(::load)
+        val parentLocalPropertiesFile = rootProject.projectDir.parentFile?.resolve("local.properties")
+        if (parentLocalPropertiesFile != null && parentLocalPropertiesFile.exists()) {
+            parentLocalPropertiesFile.inputStream().use(::load)
+        }
+        val projectLocalPropertiesFile = rootProject.file("local.properties")
+        if (projectLocalPropertiesFile.exists()) {
+            projectLocalPropertiesFile.inputStream().use(::load)
         }
     }
     val kakaoRestApiKey = localProperties.getProperty("kakao.rest.api.key", "")
     val naverMapNcpKeyId = localProperties.getProperty("naver.map.ncp.key.id", "")
-    val naverProxyBaseUrl = localProperties.getProperty("naver.proxy.base.url", "http://43.200.8.165/api/naver")
+        .ifBlank { System.getenv("NAVER_MAP_NCP_KEY_ID").orEmpty() }
+    val naverProxyBaseUrl = localProperties.getProperty("naver.proxy.base.url", "https://hongsik.blog/api/naver")
+    val catchProApiBaseUrl = localProperties.getProperty("catchpro.api.base.url", "https://hongsik.blog")
 
     namespace = "com.catchpro.app"
     compileSdk = 37
@@ -34,6 +40,7 @@ android {
         buildConfigField("String", "NAVER_MAP_NCP_KEY_ID", "\"${naverMapNcpKeyId.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "NAVER_MAP_NCP_KEY", "\"\"")
         buildConfigField("String", "NAVER_PROXY_BASE_URL", "\"${naverProxyBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("String", "CATCHPRO_API_BASE_URL", "\"${catchProApiBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
