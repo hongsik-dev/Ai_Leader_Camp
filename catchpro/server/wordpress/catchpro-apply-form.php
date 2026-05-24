@@ -169,29 +169,31 @@ function catchpro_apply_render_form($raw_atts = []): string
         }
         .catchpro-apply {
             --cp-ink: #15191f;
-            --cp-muted: #5e6876;
-            --cp-line: #e4e8ee;
-            --cp-soft: #f6f8fb;
-            --cp-blue: #1967d2;
-            --cp-blue-dark: #0f3f86;
-            --cp-green: #0f8b5f;
+            --cp-muted: #5d6472;
+            --cp-line: #dfe3ea;
+            --cp-soft: #f7f8fb;
+            --cp-blue: #2d55ff;
+            --cp-blue-dark: #183fff;
+            --cp-green: #158f72;
             --cp-radius: 8px;
             color: var(--cp-ink);
             font-family: inherit;
             line-height: 1.65;
+            background: #fff;
         }
         .catchpro-apply * {
             box-sizing: border-box;
         }
         .catchpro-apply__hero {
-            background: linear-gradient(135deg, #0f1724 0%, #17324f 58%, #0f5b83 100%);
-            color: #fff;
+            background: #fff;
+            color: var(--cp-ink);
+            border-bottom: 1px solid var(--cp-line);
             margin: 0 calc(50% - 50vw) 0;
-            padding: 72px max(24px, calc((100vw - 1040px) / 2)) 64px;
+            padding: 64px max(24px, calc((100vw - 1040px) / 2)) 52px;
         }
         .catchpro-apply__eyebrow {
             margin: 0 0 14px;
-            color: #9bd0ff;
+            color: var(--cp-blue);
             font-size: 15px;
             font-weight: 700;
             letter-spacing: 0;
@@ -199,7 +201,7 @@ function catchpro_apply_render_form($raw_atts = []): string
         .catchpro-apply__hero h1 {
             max-width: 780px;
             margin: 0;
-            color: #fff;
+            color: var(--cp-ink);
             font-size: clamp(34px, 5vw, 58px);
             line-height: 1.12;
             letter-spacing: 0;
@@ -207,7 +209,7 @@ function catchpro_apply_render_form($raw_atts = []): string
         .catchpro-apply__lead {
             max-width: 720px;
             margin: 22px 0 0;
-            color: #e4eef8;
+            color: var(--cp-muted);
             font-size: 19px;
         }
         .catchpro-apply__actions {
@@ -223,24 +225,24 @@ function catchpro_apply_render_form($raw_atts = []): string
             min-height: 46px;
             padding: 0 18px;
             border-radius: var(--cp-radius);
-            background: #fff;
-            color: #10223a;
+            background: var(--cp-blue);
+            color: #fff;
             font-weight: 800;
             text-decoration: none;
         }
         .catchpro-apply__button--ghost {
-            background: rgba(255, 255, 255, 0.12);
-            color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.28);
+            background: #fff;
+            color: var(--cp-blue);
+            border: 1px solid var(--cp-line);
         }
         .catchpro-apply__button--kakao {
             background: #fee500;
             color: #1d1d1d;
         }
         .catchpro-apply__button--disabled {
-            background: rgba(255, 255, 255, 0.09);
-            color: rgba(255, 255, 255, 0.72);
-            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: #f2f4f8;
+            color: #717888;
+            border: 1px solid var(--cp-line);
             cursor: default;
         }
         .catchpro-apply__wrap {
@@ -253,7 +255,7 @@ function catchpro_apply_render_form($raw_atts = []): string
             border-left: 5px solid var(--cp-green);
             border-radius: var(--cp-radius);
             padding: 16px 18px;
-            background: #f1fbf6;
+            background: #f5fbf8;
             color: #194932;
             font-weight: 700;
             margin-bottom: 22px;
@@ -269,6 +271,7 @@ function catchpro_apply_render_form($raw_atts = []): string
             border-radius: var(--cp-radius);
             padding: 20px;
             background: #fff;
+            box-shadow: none;
         }
         .catchpro-apply__panel h2,
         .catchpro-apply__panel h3 {
@@ -302,20 +305,20 @@ function catchpro_apply_render_form($raw_atts = []): string
             margin-bottom: 40px;
         }
         .catchpro-apply__step {
-            background: var(--cp-soft);
+            background: #fff;
             padding: 18px;
         }
         .catchpro-apply__step strong {
             display: block;
             margin-bottom: 6px;
-            color: var(--cp-blue-dark);
+            color: var(--cp-blue);
         }
         .catchpro-apply__form {
             border: 1px solid var(--cp-line);
             border-radius: var(--cp-radius);
             background: #fff;
             padding: 28px;
-            box-shadow: 0 18px 40px rgba(18, 32, 54, 0.08);
+            box-shadow: none;
         }
         .catchpro-apply__fields {
             display: grid;
@@ -353,7 +356,7 @@ function catchpro_apply_render_form($raw_atts = []): string
         .catchpro-apply input:focus,
         .catchpro-apply select:focus,
         .catchpro-apply textarea:focus {
-            outline: 3px solid rgba(25, 103, 210, 0.16);
+            outline: 3px solid rgba(45, 85, 255, 0.14);
             border-color: var(--cp-blue);
         }
         .catchpro-apply__consent {
@@ -393,7 +396,7 @@ function catchpro_apply_render_form($raw_atts = []): string
             padding: 18px;
             border: 1px solid #f0de5b;
             border-radius: var(--cp-radius);
-            background: #fffbea;
+            background: #fffdf0;
         }
         .catchpro-apply__contact strong {
             display: block;
