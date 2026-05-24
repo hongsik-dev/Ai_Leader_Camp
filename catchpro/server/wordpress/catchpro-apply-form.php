@@ -2,7 +2,7 @@
 /**
  * Plugin Name: CatchPro Apply Form
  * Description: CatchPro Pro 신청 폼과 관리자 저장소를 제공합니다.
- * Version: 1.0.3
+ * Version: 1.0.4
  * Author: CatchPro
  */
 
@@ -149,8 +149,10 @@ function catchpro_apply_render_form($raw_atts = []): string
         }
         .site-header,
         .single-header,
+        .site-footer,
         body.catchpro-apply-page .site-header,
-        body.catchpro-apply-page .single-header {
+        body.catchpro-apply-page .single-header,
+        body.catchpro-apply-page .site-footer {
             display: none !important;
         }
         #content,
@@ -536,6 +538,22 @@ function catchpro_apply_render_form($raw_atts = []): string
             color: var(--cp-muted);
             font-size: 14px;
         }
+        .catchpro-apply__footer {
+            margin: 42px 0 0;
+            padding: 22px 0 0;
+            border-top: 1px solid var(--cp-line);
+            color: var(--cp-muted);
+            font-size: 14px;
+        }
+        .catchpro-apply__footer strong {
+            color: var(--cp-ink);
+            font-weight: 900;
+        }
+        .catchpro-apply__footer a {
+            color: var(--cp-blue);
+            font-weight: 800;
+            text-decoration: none;
+        }
         .catchpro-apply__hidden {
             display: none;
         }
@@ -710,6 +728,13 @@ function catchpro_apply_render_form($raw_atts = []): string
                     <p class="catchpro-apply__fine">접수 후 순서대로 확인해 연락드립니다.</p>
                 </form>
             </section>
+            <footer class="catchpro-apply__footer">
+                <p><strong>CatchPro</strong> · 오더확정과 지도 네비를 더 빠르게 준비하는 운행 보조 서비스</p>
+                <?php if ($has_kakao) : ?>
+                    <p>상담 문의는 <a href="<?php echo esc_url($kakao_url); ?>" target="_blank" rel="noopener noreferrer">카카오톡 채널</a>에서 확인합니다.</p>
+                <?php endif; ?>
+                <p>© 2026 CatchPro</p>
+            </footer>
         </div>
     </div>
     <script>
