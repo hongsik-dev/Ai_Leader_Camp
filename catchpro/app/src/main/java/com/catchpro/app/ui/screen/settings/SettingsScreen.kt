@@ -19,20 +19,24 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
@@ -43,6 +47,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.catchpro.app.BuildConfig
+import com.catchpro.app.data.license.LicenseRepository
+import com.catchpro.app.data.license.LicenseSnapshot
 import com.catchpro.app.data.local.entity.AccessibilityCaptureEntity
 import com.catchpro.app.data.repository.AccessibilityCaptureRepository
 import com.catchpro.app.data.repository.SettingsRepository
@@ -53,11 +59,13 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
     captureRepository: AccessibilityCaptureRepository,
     settingsRepository: SettingsRepository,
+    licenseRepository: LicenseRepository,
 ) {
     val factory = remember(settingsRepository) {
         SettingsViewModel.factory(settingsRepository = settingsRepository)
@@ -72,8 +80,19 @@ fun SettingsScreen(
         mutableStateOf(uiState.kakaoRestApiKey)
     }
     var showAdvancedDiagnostics by remember { mutableStateOf(false) }
+    var licenseSnapshot by remember(licenseRepository) {
+        mutableStateOf(licenseRepository.snapshot())
+    }
+    var licenseRefreshing by remember { mutableStateOf(false) }
+    var licenseEmailDraft by remember(licenseSnapshot.email) {
+        mutableStateOf(licenseSnapshot.email)
+    }
+    var licensePhoneDraft by remember(licenseSnapshot.phone) {
+        mutableStateOf(licenseSnapshot.phone)
+    }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
     var accessibilityEnabled by remember {
         mutableStateOf(CatchProAccessibilityService.isEnabled(context))
     }
@@ -118,11 +137,41 @@ fun SettingsScreen(
         }
     }
 
+    LaunchedEffect(licenseRepository) {
+        if (BuildConfig.IS_PRO_EDITION) {
+            licenseRefreshing = true
+            licenseSnapshot = licenseRepository.refreshIfNeeded()
+            licenseRefreshing = false
+        }
+    }
+
     ScreenScaffold(
         title = "설정",
         subtitle = "접근성, 알림, 위치 권한, 내부 분석 로그처럼 앱이 안정적으로 동작하기 위한 시스템 설정만 다룹니다.",
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (BuildConfig.IS_PRO_EDITION) {
+                LicenseStatusCard(
+                    snapshot = licenseSnapshot,
+                    emailDraft = licenseEmailDraft,
+                    phoneDraft = licensePhoneDraft,
+                    refreshing = licenseRefreshing,
+                    onEmailChange = { licenseEmailDraft = it },
+                    onPhoneChange = { licensePhoneDraft = it },
+                    onSaveIdentity = {
+                        licenseRepository.saveIdentity(licenseEmailDraft, licensePhoneDraft)
+                        licenseSnapshot = licenseRepository.snapshot()
+                    },
+                    onRefresh = {
+                        scope.launch {
+                            licenseRepository.saveIdentity(licenseEmailDraft, licensePhoneDraft)
+                            licenseRefreshing = true
+                            licenseSnapshot = licenseRepository.refreshIfNeeded(force = true)
+                            licenseRefreshing = false
+                        }
+                    },
+                )
+            }
             SettingsToggleCard(
                 title = "알림/화면 설정",
                 rows = listOf(
@@ -449,6 +498,112 @@ private fun SettingsScopeCard() {
 }
 
 @Composable
+private fun LicenseStatusCard(
+    snapshot: LicenseSnapshot,
+    emailDraft: String,
+    phoneDraft: String,
+    refreshing: Boolean,
+    onEmailChange: (String) -> Unit,
+    onPhoneChange: (String) -> Unit,
+    onSaveIdentity: () -> Unit,
+    onRefresh: () -> Unit,
+) {
+    val identityDirty = emailDraft.trim() != snapshot.email.trim() ||
+        phoneDraft.filter(Char::isDigit) != snapshot.phone.filter(Char::isDigit)
+    val statusText = when {
+        snapshot.active -> "Pro 라이선스: 활성"
+        snapshot.status == "grace" -> "Pro 라이선스: 임시 유지"
+        snapshot.status.isBlank() -> "Pro 라이선스: 확인 필요"
+        else -> "Pro 라이선스: ${snapshot.status}"
+    }
+    Card {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Pro 라이선스",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = statusText,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (snapshot.active) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
+            )
+            if (snapshot.message.isNotBlank()) {
+                Text(
+                    text = snapshot.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = "기기코드: ${snapshot.deviceId}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "최근 확인: ${snapshot.checkedAtMillis.toNullableSettingsTimestamp()}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (snapshot.expiresAt.isNotBlank()) {
+                Text(
+                    text = "만료일: ${snapshot.expiresAt}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            OutlinedTextField(
+                value = emailDraft,
+                onValueChange = onEmailChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("구독 이메일") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    keyboardType = KeyboardType.Email,
+                ),
+            )
+            OutlinedTextField(
+                value = phoneDraft,
+                onValueChange = onPhoneChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("전화번호") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onSaveIdentity,
+                    enabled = identityDirty && !refreshing,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("정보 저장")
+                }
+                Button(
+                    onClick = onRefresh,
+                    enabled = !refreshing,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (refreshing) "확인 중" else "라이선스 확인")
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AccessibilityReadinessCard(
     accessibilityEnabled: Boolean,
     latestCapture: AccessibilityCaptureEntity?,
@@ -663,3 +818,6 @@ private fun Long.toSettingsTimestamp(): String {
         .atZone(ZoneId.systemDefault())
         .format(formatter)
 }
+
+private fun Long.toNullableSettingsTimestamp(): String =
+    takeIf { it > 0L }?.toSettingsTimestamp() ?: "없음"

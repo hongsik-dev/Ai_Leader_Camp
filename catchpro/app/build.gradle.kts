@@ -20,6 +20,7 @@ android {
     val kakaoRestApiKey = localProperties.getProperty("kakao.rest.api.key", "")
     val naverMapNcpKeyId = localProperties.getProperty("naver.map.ncp.key.id", "")
     val naverProxyBaseUrl = localProperties.getProperty("naver.proxy.base.url", "http://43.200.8.165/api/naver")
+    val catchProApiBaseUrl = localProperties.getProperty("catchpro.api.base.url", "http://43.200.8.165")
 
     namespace = "com.catchpro.app"
     compileSdk = 37
@@ -34,6 +35,7 @@ android {
         buildConfigField("String", "NAVER_MAP_NCP_KEY_ID", "\"${naverMapNcpKeyId.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "NAVER_MAP_NCP_KEY", "\"\"")
         buildConfigField("String", "NAVER_PROXY_BASE_URL", "\"${naverProxyBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("String", "CATCHPRO_API_BASE_URL", "\"${catchProApiBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

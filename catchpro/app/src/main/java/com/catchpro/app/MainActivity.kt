@@ -6,11 +6,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
+import com.catchpro.app.data.license.LicenseRepository
 import com.catchpro.app.data.repository.AccessibilityCaptureRepository
 import com.catchpro.app.data.repository.OrderEventRepository
 import com.catchpro.app.data.repository.SettingsRepository
 import com.catchpro.app.data.repository.TmapQueueRepository
 import com.catchpro.app.data.sync.RouteAddressCloudSyncManager
+import com.catchpro.app.feature.CatchProFeatureGate
 import com.catchpro.app.navigation.CatchProNavHost
 import com.catchpro.app.observation.NaverRouteDistanceService
 import com.catchpro.app.ui.theme.CatchProTheme
@@ -39,10 +41,18 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var routeAddressCloudSyncManager: RouteAddressCloudSyncManager
 
+    @Inject
+    lateinit var licenseRepository: LicenseRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC) {
+        if (BuildConfig.IS_PRO_EDITION) {
+            lifecycleScope.launch {
+                licenseRepository.refreshIfNeeded()
+            }
+        }
+        if (CatchProFeatureGate.routeAddressCloudSyncAvailable(this)) {
             routeAddressCloudSyncManager.start()
         }
         handleInsungDebugRouteAddressIntent(intent)
@@ -56,6 +66,7 @@ class MainActivity : ComponentActivity() {
                     tmapQueueRepository = tmapQueueRepository,
                     routeDistanceService = routeDistanceService,
                     routeAddressCloudSyncManager = routeAddressCloudSyncManager,
+                    licenseRepository = licenseRepository,
                 )
             }
         }

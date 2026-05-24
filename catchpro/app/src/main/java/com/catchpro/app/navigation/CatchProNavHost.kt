@@ -18,6 +18,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.catchpro.app.BuildConfig
+import com.catchpro.app.data.license.LicenseRepository
 import com.catchpro.app.data.model.OrderEventDraft
 import com.catchpro.app.data.repository.AccessibilityCaptureRepository
 import com.catchpro.app.data.repository.OrderEventRepository
@@ -43,6 +44,7 @@ fun CatchProNavHost(
     tmapQueueRepository: TmapQueueRepository,
     routeDistanceService: NaverRouteDistanceService,
     routeAddressCloudSyncManager: RouteAddressCloudSyncManager,
+    licenseRepository: LicenseRepository,
 ) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -134,6 +136,7 @@ fun CatchProNavHost(
                 SettingsScreen(
                     captureRepository = accessibilityCaptureRepository,
                     settingsRepository = settingsRepository,
+                    licenseRepository = licenseRepository,
                 )
             }
             composable(Routes.Guide) {

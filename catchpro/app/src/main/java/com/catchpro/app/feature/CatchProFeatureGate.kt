@@ -1,17 +1,14 @@
 package com.catchpro.app.feature
 
 import android.content.Context
-import android.os.Build
 import com.catchpro.app.BuildConfig
+import com.catchpro.app.data.license.LicenseRepository
 
 object CatchProFeatureGate {
-    private const val GooglePlayInstallerPackage = "com.android.vending"
-    private const val PackageInstallerPackage = "com.google.android.packageinstaller"
-
     fun proEntitlementSatisfied(context: Context): Boolean {
         if (!BuildConfig.IS_PRO_EDITION) return true
-        if (BuildConfig.DEBUG || BuildConfig.IS_PERSONAL_EDITION) return true
-        return context.installingPackageName() == GooglePlayInstallerPackage
+        if (BuildConfig.IS_PERSONAL_EDITION) return true
+        return LicenseRepository.cachedEntitlementSatisfied(context)
     }
 
     fun autoConfirmAvailable(context: Context): Boolean =
@@ -27,18 +24,6 @@ object CatchProFeatureGate {
         BuildConfig.FEATURE_NAVI_OPTIMIZATION && proEntitlementSatisfied(context)
 
     fun proEntitlementNotice(context: Context): String? {
-        if (!BuildConfig.IS_PRO_EDITION || proEntitlementSatisfied(context)) return null
-        return "Pro 기능은 Google Play에서 설치한 유료 앱에서 활성화됩니다."
-    }
-
-    @Suppress("DEPRECATION")
-    private fun Context.installingPackageName(): String? {
-        return runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                packageManager.getInstallSourceInfo(packageName).installingPackageName
-            } else {
-                packageManager.getInstallerPackageName(packageName)
-            }
-        }.getOrNull()?.takeUnless { it == PackageInstallerPackage }
+        return LicenseRepository.cachedNotice(context)
     }
 }
