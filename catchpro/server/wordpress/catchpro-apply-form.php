@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: CatchPro Apply Form
- * Description: 상담형 CatchPro Pro 신청 폼과 관리자 저장소를 제공합니다.
- * Version: 1.0.1
+ * Description: CatchPro Pro 신청 폼과 관리자 저장소를 제공합니다.
+ * Version: 1.0.2
  * Author: CatchPro
  */
 
@@ -184,6 +184,24 @@ function catchpro_apply_render_form($raw_atts = []): string
         .catchpro-apply * {
             box-sizing: border-box;
         }
+        @keyframes catchproFadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(14px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @keyframes catchproFadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
         .catchpro-apply__hero {
             background: #fff;
             color: var(--cp-ink);
@@ -197,6 +215,8 @@ function catchpro_apply_render_form($raw_atts = []): string
             font-size: 15px;
             font-weight: 700;
             letter-spacing: 0;
+            opacity: 0;
+            animation: catchproFadeUp 0.55s ease forwards;
         }
         .catchpro-apply__hero h1 {
             max-width: 780px;
@@ -205,18 +225,24 @@ function catchpro_apply_render_form($raw_atts = []): string
             font-size: clamp(34px, 5vw, 58px);
             line-height: 1.12;
             letter-spacing: 0;
+            opacity: 0;
+            animation: catchproFadeUp 0.62s ease 0.08s forwards;
         }
         .catchpro-apply__lead {
             max-width: 720px;
             margin: 22px 0 0;
             color: var(--cp-muted);
             font-size: 19px;
+            opacity: 0;
+            animation: catchproFadeUp 0.62s ease 0.16s forwards;
         }
         .catchpro-apply__actions {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
             margin-top: 30px;
+            opacity: 0;
+            animation: catchproFadeUp 0.62s ease 0.24s forwards;
         }
         .catchpro-apply__button {
             display: inline-flex;
@@ -229,6 +255,11 @@ function catchpro_apply_render_form($raw_atts = []): string
             color: #fff;
             font-weight: 800;
             text-decoration: none;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+        }
+        .catchpro-apply__button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(45, 85, 255, 0.16);
         }
         .catchpro-apply__button--ghost {
             background: #fff;
@@ -245,6 +276,10 @@ function catchpro_apply_render_form($raw_atts = []): string
             border: 1px solid var(--cp-line);
             cursor: default;
         }
+        .catchpro-apply__button--disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
         .catchpro-apply__wrap {
             max-width: 1040px;
             margin: 0 auto;
@@ -259,6 +294,7 @@ function catchpro_apply_render_form($raw_atts = []): string
             color: #194932;
             font-weight: 700;
             margin-bottom: 22px;
+            animation: catchproFadeIn 0.4s ease both;
         }
         .catchpro-apply__grid {
             display: grid;
@@ -272,6 +308,20 @@ function catchpro_apply_render_form($raw_atts = []): string
             padding: 20px;
             background: #fff;
             box-shadow: none;
+            opacity: 0;
+            animation: catchproFadeUp 0.52s ease forwards;
+            transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+        }
+        .catchpro-apply__panel:nth-child(2) {
+            animation-delay: 0.06s;
+        }
+        .catchpro-apply__panel:nth-child(3) {
+            animation-delay: 0.12s;
+        }
+        .catchpro-apply__panel:hover {
+            transform: translateY(-2px);
+            border-color: #c4ccff;
+            background: #fcfdff;
         }
         .catchpro-apply__panel h2,
         .catchpro-apply__panel h3 {
@@ -307,6 +357,17 @@ function catchpro_apply_render_form($raw_atts = []): string
         .catchpro-apply__step {
             background: #fff;
             padding: 18px;
+            opacity: 0;
+            animation: catchproFadeUp 0.5s ease forwards;
+        }
+        .catchpro-apply__step:nth-child(2) {
+            animation-delay: 0.05s;
+        }
+        .catchpro-apply__step:nth-child(3) {
+            animation-delay: 0.1s;
+        }
+        .catchpro-apply__step:nth-child(4) {
+            animation-delay: 0.15s;
         }
         .catchpro-apply__step strong {
             display: block;
@@ -319,6 +380,8 @@ function catchpro_apply_render_form($raw_atts = []): string
             background: #fff;
             padding: 28px;
             box-shadow: none;
+            opacity: 0;
+            animation: catchproFadeUp 0.55s ease 0.08s forwards;
         }
         .catchpro-apply__fields {
             display: grid;
@@ -348,6 +411,7 @@ function catchpro_apply_render_form($raw_atts = []): string
             color: var(--cp-ink);
             background: #fff;
             font: inherit;
+            transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
         }
         .catchpro-apply textarea {
             min-height: 120px;
@@ -383,9 +447,12 @@ function catchpro_apply_render_form($raw_atts = []): string
             font: inherit;
             font-size: 17px;
             font-weight: 900;
+            transition: transform 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
         }
         .catchpro-apply__submit:hover {
             background: #1558b8;
+            transform: translateY(-1px);
+            box-shadow: 0 10px 20px rgba(45, 85, 255, 0.18);
         }
         .catchpro-apply__contact {
             display: grid;
@@ -397,6 +464,8 @@ function catchpro_apply_render_form($raw_atts = []): string
             border: 1px solid #f0de5b;
             border-radius: var(--cp-radius);
             background: #fffdf0;
+            opacity: 0;
+            animation: catchproFadeUp 0.5s ease forwards;
         }
         .catchpro-apply__contact strong {
             display: block;
@@ -419,11 +488,20 @@ function catchpro_apply_render_form($raw_atts = []): string
             font-weight: 900;
             text-decoration: none;
             white-space: nowrap;
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+        .catchpro-apply__contact-link:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(150, 124, 0, 0.16);
         }
         .catchpro-apply__contact-link--disabled {
             background: #e6e0bd;
             color: #706941;
             cursor: default;
+        }
+        .catchpro-apply__contact-link--disabled:hover {
+            transform: none;
+            box-shadow: none;
         }
         .catchpro-apply__fine {
             margin: 14px 0 0;
@@ -445,14 +523,35 @@ function catchpro_apply_render_form($raw_atts = []): string
                 grid-template-columns: 1fr;
             }
         }
+        @media (prefers-reduced-motion: reduce) {
+            .catchpro-apply *,
+            .catchpro-apply *::before,
+            .catchpro-apply *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                scroll-behavior: auto !important;
+                transition-duration: 0.01ms !important;
+            }
+            .catchpro-apply__eyebrow,
+            .catchpro-apply__hero h1,
+            .catchpro-apply__lead,
+            .catchpro-apply__actions,
+            .catchpro-apply__panel,
+            .catchpro-apply__step,
+            .catchpro-apply__form,
+            .catchpro-apply__contact {
+                opacity: 1 !important;
+                transform: none !important;
+            }
+        }
     </style>
     <div class="catchpro-apply">
         <section class="catchpro-apply__hero">
-            <p class="catchpro-apply__eyebrow">CatchPro 상담 신청</p>
-            <h1>운행 방식에 맞는 CatchPro 버전을 먼저 확인합니다.</h1>
+            <p class="catchpro-apply__eyebrow">CatchPro Pro</p>
+            <h1>운행에 필요한 기능만 골라 더 빠르게 시작하세요.</h1>
             <p class="catchpro-apply__lead">
-                CatchPro Pro는 실제 운행 환경, 사용 기기, 인성앱 사용 여부를 확인한 뒤 제공하는 상담형 서비스입니다.
-                신청 내용을 남기면 설치 가능 여부와 운영 방식을 검토해서 안내합니다.
+                인성 CatchPro Pro와 CatchPro Navi Pro는 사용하는 폰과 운행 방식에 따라 다르게 세팅됩니다.
+                신청서를 남겨주시면 설치 가능 여부와 사용 방법을 순서대로 안내해드립니다.
             </p>
             <div class="catchpro-apply__actions">
                 <a class="catchpro-apply__button" href="#catchpro-apply-form">신청서 작성</a>
@@ -471,23 +570,23 @@ function catchpro_apply_render_form($raw_atts = []): string
             <?php endif; ?>
 
             <section aria-labelledby="catchpro-fit-title">
-                <h2 id="catchpro-fit-title" class="catchpro-apply__section-title">이런 기준으로 확인합니다.</h2>
+                <h2 id="catchpro-fit-title" class="catchpro-apply__section-title">서비스 구성</h2>
                 <p class="catchpro-apply__section-copy">
-                    무조건 설치를 권하는 방식이 아니라, 실제 운행 흐름에 맞는지 먼저 봅니다.
-                    인성 CatchPro와 CatchPro Navi는 역할이 다르기 때문에 사용하는 폰과 목적을 나눠 확인합니다.
+                    오더를 잡는 폰과 지도를 보는 폰의 역할을 분리하면 운행 중 화면 전환이 줄어듭니다.
+                    필요한 기능을 확인한 뒤 가장 맞는 구성으로 안내합니다.
                 </p>
                 <div class="catchpro-apply__grid">
                     <article class="catchpro-apply__panel">
                         <h3>인성 CatchPro Pro</h3>
-                        <p>인성앱을 사용하는 폰에서 오더 상세 진입 후 조건에 맞는 확정을 보조합니다.</p>
+                        <p>인성앱을 사용하는 폰에서 조건 확인과 확정 동작을 빠르게 보조합니다.</p>
                     </article>
                     <article class="catchpro-apply__panel">
                         <h3>CatchPro Navi Pro</h3>
-                        <p>지도, 주소 동기화, 방문순서, 네비 연결을 운행 중 보기 좋게 분리합니다.</p>
+                        <p>주소 동기화, 방문순서, 네비 실행을 지도 중심 화면으로 제공합니다.</p>
                     </article>
                     <article class="catchpro-apply__panel">
-                        <h3>개인용 운영</h3>
-                        <p>초기에는 상담, 수동 승인, 라이선스 확인을 거쳐 제한적으로 제공합니다.</p>
+                        <h3>설치 상담</h3>
+                        <p>사용 기기와 운행 지역을 확인한 뒤 설치 순서와 이용 방법을 안내합니다.</p>
                     </article>
                 </div>
             </section>
@@ -501,15 +600,15 @@ function catchpro_apply_render_form($raw_atts = []): string
                     </div>
                     <div class="catchpro-apply__step">
                         <strong>2. 확인</strong>
-                        <span>설치 가능 여부와 실제 사용 목적을 확인합니다.</span>
+                        <span>사용 기기와 필요한 기능을 확인합니다.</span>
                     </div>
                     <div class="catchpro-apply__step">
-                        <strong>3. 승인</strong>
-                        <span>결제와 라이선스 승인 방식을 안내합니다.</span>
+                        <strong>3. 안내</strong>
+                        <span>이용 방식과 설치 절차를 안내합니다.</span>
                     </div>
                     <div class="catchpro-apply__step">
                         <strong>4. 설치</strong>
-                        <span>개인별 설치 링크와 사용 안내를 제공합니다.</span>
+                        <span>설치 후 기본 설정을 함께 확인합니다.</span>
                     </div>
                 </div>
             </section>
@@ -517,12 +616,12 @@ function catchpro_apply_render_form($raw_atts = []): string
             <section id="catchpro-apply-form" aria-labelledby="catchpro-form-title">
                 <h2 id="catchpro-form-title" class="catchpro-apply__section-title">신청서</h2>
                 <p class="catchpro-apply__section-copy">
-                    접수된 내용은 WordPress 관리자에 저장됩니다. 연락처는 설치 안내와 라이선스 확인 목적으로만 사용합니다.
+                    운행 지역, 사용 기기, 필요한 기능을 남겨주세요. 확인 후 연락드리겠습니다.
                 </p>
                 <div class="catchpro-apply__contact">
                     <div>
                         <strong>바로 상담이 필요하면 카카오톡으로 문의할 수 있습니다.</strong>
-                        <span>신청서를 먼저 남기면 기기, 버전, 라이선스 확인을 더 빠르게 진행할 수 있습니다.</span>
+                        <span>신청서를 함께 남겨주시면 기기와 버전 확인을 더 빠르게 진행할 수 있습니다.</span>
                     </div>
                     <?php if ($has_kakao) : ?>
                         <a class="catchpro-apply__contact-link" href="<?php echo esc_url($kakao_url); ?>" target="_blank" rel="noopener noreferrer">카카오톡 상담 열기</a>
@@ -574,10 +673,10 @@ function catchpro_apply_render_form($raw_atts = []): string
                     </div>
                     <label class="catchpro-apply__consent">
                         <input type="checkbox" name="privacy_consent" value="1" required>
-                        <span>상담과 라이선스 발급 안내를 위해 위 정보를 수집하고 확인하는 것에 동의합니다.</span>
+                        <span>상담 및 설치 안내를 위해 입력한 정보를 확인하는 것에 동의합니다.</span>
                     </label>
                     <button class="catchpro-apply__submit" type="submit">신청 접수하기</button>
-                    <p class="catchpro-apply__fine">접수 후 실제 운행 방식과 설치 가능 조건을 확인한 뒤 안내합니다.</p>
+                    <p class="catchpro-apply__fine">접수 후 순서대로 확인해 연락드립니다.</p>
                 </form>
             </section>
         </div>
