@@ -113,6 +113,7 @@ data class TmapQueueUiState(
     val isCalculatingRoute: Boolean = false,
     val manualRouteAddresses: List<String> = List(ManualRouteAddressSlotCount) { "" },
     val routeAddressMap: RouteAddressMapUiState = RouteAddressMapUiState(),
+    val routeAddressCloudSyncFeatureAvailable: Boolean = false,
     val routeAddressCloudSyncEnabled: Boolean = false,
     val routeAddressCloudSyncRoomCode: String = "",
     val routeAddressCloudSyncStatus: RouteAddressCloudSyncStatus = RouteAddressCloudSyncStatus(),
@@ -149,6 +150,7 @@ class TmapQueueViewModel(
                 _uiState.update {
                     it.copy(
                         manualRouteAddresses = settings.tmapManualRouteAddressesText.toManualRouteAddressSlots(),
+                        routeAddressCloudSyncFeatureAvailable = settings.routeAddressCloudSyncFeatureAvailable,
                         routeAddressCloudSyncEnabled = settings.routeAddressCloudSyncEnabled,
                         routeAddressCloudSyncRoomCode = settings.routeAddressCloudSyncRoomCode,
                     )
@@ -265,6 +267,12 @@ class TmapQueueViewModel(
 
     fun setRouteAddressCloudSyncEnabled(enabled: Boolean) {
         if (!BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC) return
+        if (enabled && !_uiState.value.routeAddressCloudSyncFeatureAvailable) {
+            _uiState.update {
+                it.copy(message = "Pro 라이선스 인증 후 AWS 주소 동기화를 켤 수 있습니다.")
+            }
+            return
+        }
         viewModelScope.launch {
             settingsRepository.setRouteAddressCloudSyncEnabled(enabled)
         }
@@ -1420,7 +1428,7 @@ private fun routeDistanceCacheKey(
     }
 
 private fun RouteWaypoint.LatLng.routeCacheCoordinate(): String =
-    String.format(Locale.US, "%.5f,%.5f", latitude, longitude)
+    String.format(Locale.US, "%.4f,%.4f", latitude, longitude)
 
 private fun NearestRouteCandidate.toNearestStop(
     order: Int,

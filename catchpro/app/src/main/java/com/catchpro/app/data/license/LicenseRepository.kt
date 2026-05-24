@@ -8,7 +8,11 @@ import java.time.Instant
 import java.time.OffsetDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -25,6 +29,17 @@ class LicenseRepository @Inject constructor(
 
     fun snapshot(): LicenseSnapshot =
         prefs.snapshot(context.deviceLicenseId())
+
+    fun snapshots(): Flow<LicenseSnapshot> = callbackFlow {
+        trySend(snapshot())
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            trySend(snapshot())
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        awaitClose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }.distinctUntilChanged()
 
     fun saveIdentity(email: String, phone: String) {
         prefs.edit()
@@ -58,7 +73,7 @@ class LicenseRepository @Inject constructor(
         val request = buildCheckRequest(
             email = email,
             phone = phone,
-            deviceId = cached.deviceId.ifBlank { context.deviceLicenseId() },
+            deviceId = context.deviceLicenseId(),
         ) ?: run {
             setInactive(
                 status = "not_configured",
@@ -139,7 +154,7 @@ class LicenseRepository @Inject constructor(
             .putLong(KeyCheckedAt, now)
             .putLong(KeyGraceUntil, graceUntil)
             .putLong(KeyNextCheckAfter, now + if (active) ActiveCheckIntervalMillis else InactiveCheckIntervalMillis)
-            .putString(KeyDeviceId, json.optString("deviceId").ifBlank { context.deviceLicenseId() })
+            .putString(KeyDeviceId, context.deviceLicenseId())
             .apply()
     }
 

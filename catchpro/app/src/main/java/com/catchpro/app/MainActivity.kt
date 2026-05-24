@@ -12,7 +12,6 @@ import com.catchpro.app.data.repository.OrderEventRepository
 import com.catchpro.app.data.repository.SettingsRepository
 import com.catchpro.app.data.repository.TmapQueueRepository
 import com.catchpro.app.data.sync.RouteAddressCloudSyncManager
-import com.catchpro.app.feature.CatchProFeatureGate
 import com.catchpro.app.navigation.CatchProNavHost
 import com.catchpro.app.observation.NaverRouteDistanceService
 import com.catchpro.app.ui.theme.CatchProTheme
@@ -52,7 +51,7 @@ class MainActivity : ComponentActivity() {
                 licenseRepository.refreshIfNeeded()
             }
         }
-        if (CatchProFeatureGate.routeAddressCloudSyncAvailable(this)) {
+        if (BuildConfig.FEATURE_ROUTE_ADDRESS_CLOUD_SYNC) {
             routeAddressCloudSyncManager.start()
         }
         handleInsungDebugRouteAddressIntent(intent)

@@ -53,6 +53,7 @@ fun CatchProNavHost(
     val availableTopLevelDestinations = when {
         BuildConfig.IS_NAVI_APP && showEditionGuide -> naviTopLevelDestinations
         BuildConfig.IS_NAVI_APP -> emptyList()
+        BuildConfig.IS_FREE_EDITION -> insungFreeTopLevelDestinations + guideTopLevelDestination
         showEditionGuide -> topLevelDestinations + guideTopLevelDestination
         else -> topLevelDestinations
     }

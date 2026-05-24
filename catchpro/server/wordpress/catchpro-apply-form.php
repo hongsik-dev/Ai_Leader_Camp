@@ -14,8 +14,12 @@ add_action('init', 'catchpro_apply_register_post_type');
 add_shortcode('catchpro_apply_form', 'catchpro_apply_render_form');
 add_action('admin_post_nopriv_catchpro_apply_submit', 'catchpro_apply_handle_submit');
 add_action('admin_post_catchpro_apply_submit', 'catchpro_apply_handle_submit');
+add_action('admin_post_catchpro_license_upsert', 'catchpro_apply_handle_license_upsert');
+add_action('admin_post_catchpro_license_from_application', 'catchpro_apply_handle_license_from_application');
 add_action('admin_menu', 'catchpro_apply_register_settings_page');
 add_action('admin_init', 'catchpro_apply_register_settings');
+add_action('admin_notices', 'catchpro_apply_license_notice');
+add_action('add_meta_boxes_catchpro_application', 'catchpro_apply_register_application_license_box');
 add_filter('body_class', 'catchpro_apply_body_class');
 
 function catchpro_apply_register_post_type(): void
@@ -69,6 +73,15 @@ function catchpro_apply_register_settings_page(): void
         'catchpro-apply-settings',
         'catchpro_apply_render_settings_page'
     );
+
+    add_submenu_page(
+        'edit.php?post_type=catchpro_application',
+        'CatchPro 라이선스 관리',
+        '라이선스 관리',
+        'manage_options',
+        'catchpro-license-manager',
+        'catchpro_apply_render_license_manager_page'
+    );
 }
 
 function catchpro_apply_register_settings(): void
@@ -76,6 +89,16 @@ function catchpro_apply_register_settings(): void
     register_setting('catchpro_apply_settings', 'catchpro_kakao_url', [
         'type' => 'string',
         'sanitize_callback' => 'esc_url_raw',
+        'default' => '',
+    ]);
+    register_setting('catchpro_apply_settings', 'catchpro_license_api_base', [
+        'type' => 'string',
+        'sanitize_callback' => 'esc_url_raw',
+        'default' => '',
+    ]);
+    register_setting('catchpro_apply_settings', 'catchpro_license_admin_token', [
+        'type' => 'string',
+        'sanitize_callback' => 'sanitize_text_field',
         'default' => '',
     ]);
 }
@@ -105,6 +128,34 @@ function catchpro_apply_render_settings_page(): void
                         <p class="description">카카오 채널 채팅 URL이나 오픈채팅 URL을 입력하면 신청 페이지의 카카오톡 상담 버튼이 활성화됩니다.</p>
                     </td>
                 </tr>
+                <tr>
+                    <th scope="row"><label for="catchpro_license_api_base">라이선스 API 주소</label></th>
+                    <td>
+                        <input
+                            id="catchpro_license_api_base"
+                            name="catchpro_license_api_base"
+                            type="url"
+                            class="regular-text"
+                            value="<?php echo esc_attr((string) get_option('catchpro_license_api_base', '')); ?>"
+                            placeholder="https://hongsik.blog"
+                        >
+                        <p class="description">비워두면 현재 사이트 주소를 사용합니다. 예: https://hongsik.blog</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="catchpro_license_admin_token">라이선스 관리자 토큰</label></th>
+                    <td>
+                        <input
+                            id="catchpro_license_admin_token"
+                            name="catchpro_license_admin_token"
+                            type="password"
+                            class="regular-text"
+                            value="<?php echo esc_attr((string) get_option('catchpro_license_admin_token', '')); ?>"
+                            autocomplete="new-password"
+                        >
+                        <p class="description">서버의 CATCHPRO_LICENSE_ADMIN_TOKEN 값과 같아야 라이선스 등록/연장이 가능합니다.</p>
+                    </td>
+                </tr>
             </table>
             <?php submit_button('설정 저장'); ?>
         </form>
@@ -121,6 +172,316 @@ function catchpro_apply_get_kakao_url(array $atts): string
 
     $option_url = get_option('catchpro_kakao_url', '');
     return is_string($option_url) ? esc_url_raw($option_url) : '';
+}
+
+function catchpro_apply_license_api_base(): string
+{
+    $base = get_option('catchpro_license_api_base', '');
+    if (!is_string($base) || trim($base) === '') {
+        $base = home_url();
+    }
+    return rtrim(esc_url_raw($base), '/');
+}
+
+function catchpro_apply_license_admin_token(): string
+{
+    $token = get_option('catchpro_license_admin_token', '');
+    return is_string($token) ? trim($token) : '';
+}
+
+function catchpro_apply_license_request(string $method, string $path, array $body = [])
+{
+    $token = catchpro_apply_license_admin_token();
+    if ($token === '') {
+        return new WP_Error('catchpro_license_token_missing', '라이선스 관리자 토큰이 설정되지 않았습니다.');
+    }
+
+    $args = [
+        'method' => strtoupper($method),
+        'timeout' => 12,
+        'headers' => [
+            'Accept' => 'application/json',
+            'Content-Type' => 'application/json; charset=utf-8',
+            'X-CatchPro-Admin-Token' => $token,
+        ],
+    ];
+    if ($body !== []) {
+        $args['body'] = wp_json_encode($body);
+    }
+
+    $response = wp_remote_request(catchpro_apply_license_api_base() . $path, $args);
+    if (is_wp_error($response)) {
+        return $response;
+    }
+
+    $status = (int) wp_remote_retrieve_response_code($response);
+    $decoded = json_decode((string) wp_remote_retrieve_body($response), true);
+    if (!is_array($decoded)) {
+        return new WP_Error('catchpro_license_bad_response', '라이선스 서버 응답을 해석하지 못했습니다.');
+    }
+    if ($status < 200 || $status >= 300 || empty($decoded['ok'])) {
+        $message = isset($decoded['error']) ? (string) $decoded['error'] : '라이선스 서버 요청이 실패했습니다.';
+        return new WP_Error('catchpro_license_api_failed', $message);
+    }
+
+    return $decoded;
+}
+
+function catchpro_apply_license_notice(): void
+{
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    $notice = isset($_GET['catchpro_license_notice']) ? sanitize_text_field(wp_unslash($_GET['catchpro_license_notice'])) : '';
+    if ($notice === '') {
+        return;
+    }
+    $messages = [
+        'saved' => '라이선스를 저장했습니다.',
+        'extended' => '라이선스를 연장했습니다.',
+        'expired' => '라이선스를 만료 처리했습니다.',
+        'blocked' => '라이선스를 차단했습니다.',
+        'device_reset' => '등록 기기를 초기화했습니다.',
+    ];
+    $message = $messages[$notice] ?? '라이선스 작업을 완료했습니다.';
+    echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($message) . '</p></div>';
+}
+
+function catchpro_apply_license_error_notice(WP_Error $error): void
+{
+    echo '<div class="notice notice-error"><p>' . esc_html($error->get_error_message()) . '</p></div>';
+}
+
+function catchpro_apply_license_status_label(string $status): string
+{
+    $labels = [
+        'trial' => '무료체험',
+        'active' => '정상구독',
+        'past_due' => '결제유예',
+        'expired' => '만료',
+        'blocked' => '차단',
+        'device_change_pending' => '기기변경대기',
+    ];
+    return $labels[$status] ?? $status;
+}
+
+function catchpro_apply_license_product_code(): string
+{
+    return 'catchpro-pro';
+}
+
+function catchpro_apply_license_product_label(): string
+{
+    return 'CatchPro Pro 구독';
+}
+
+function catchpro_apply_register_application_license_box(): void
+{
+    add_meta_box(
+        'catchpro-application-license',
+        '라이선스 등록',
+        'catchpro_apply_render_application_license_box',
+        'catchpro_application',
+        'side',
+        'high'
+    );
+}
+
+function catchpro_apply_render_application_license_box(WP_Post $post): void
+{
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    $name = (string) get_post_meta($post->ID, 'catchpro_name', true);
+    $phone = (string) get_post_meta($post->ID, 'catchpro_phone', true);
+    $email = (string) get_post_meta($post->ID, 'catchpro_email', true);
+    $registered = (string) get_post_meta($post->ID, 'catchpro_license_registered_editions', true);
+    ?>
+    <p>신청 정보로 통합 Pro 구독 1개월 체험을 등록합니다.</p>
+    <p>
+        <strong><?php echo esc_html($name !== '' ? $name : '이름 없음'); ?></strong><br>
+        <?php echo esc_html($phone !== '' ? $phone : '전화번호 없음'); ?><br>
+        <?php echo esc_html($email !== '' ? $email : '이메일 없음'); ?>
+    </p>
+    <?php if ($registered !== '') : ?>
+        <p><strong>최근 등록:</strong> <?php echo esc_html($registered); ?></p>
+    <?php endif; ?>
+    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:grid; gap:8px;">
+        <?php wp_nonce_field('catchpro_license_from_application', 'catchpro_license_nonce'); ?>
+        <input type="hidden" name="action" value="catchpro_license_from_application">
+        <input type="hidden" name="post_id" value="<?php echo esc_attr((string) $post->ID); ?>">
+        <button class="button button-primary" type="submit" name="edition_mode" value="<?php echo esc_attr(catchpro_apply_license_product_code()); ?>">CatchPro Pro 1개월 체험</button>
+    </form>
+    <p class="description">등록 후 고객은 앱 설정 탭에서 같은 이메일/전화번호로 라이선스 확인을 누르면 됩니다.</p>
+    <?php
+}
+
+function catchpro_apply_render_license_manager_page(): void
+{
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    ?>
+    <div class="wrap">
+        <h1>CatchPro 라이선스 관리</h1>
+        <p>고객별 통합 Pro 구독 상태와 만료일을 관리합니다. 하나의 구독으로 인성 CatchPro Pro와 CatchPro Navi Pro 사용 권한을 함께 관리합니다.</p>
+
+        <div class="card" style="max-width: 960px; padding: 18px;">
+            <h2 style="margin-top:0;">작업 설명</h2>
+            <ul style="list-style:disc; padding-left:20px;">
+                <li><strong>1개월 연장</strong>: 현재 만료일이 남아 있으면 그 날짜에서 30일을 더하고, 이미 만료됐으면 오늘부터 30일을 새로 부여합니다. 유료 결제 확인 후 사용하는 작업입니다.</li>
+                <li><strong>체험 30일</strong>: 상태를 무료체험으로 바꾸고 30일 이용 기간을 부여합니다. 신규 상담 고객에게 첫 달 무료체험을 열 때 사용합니다.</li>
+                <li><strong>기기 초기화</strong>: 등록된 기기값을 지웁니다. 기본은 고객 1명당 최대 2대까지 자동 등록되며, 고객이 휴대폰을 바꿨거나 잘못된 기기에 묶였을 때 사용합니다.</li>
+                <li><strong>만료 처리</strong>: 구독 상태를 만료로 바꾸고 만료일을 현재 시각으로 저장합니다. 기간 종료나 미결제 고객을 정리할 때 사용합니다.</li>
+                <li><strong>차단</strong>: 구독 상태를 차단으로 바꿉니다. 환불/오남용/지원 중단 등 즉시 사용을 막아야 할 때 사용합니다.</li>
+            </ul>
+        </div>
+
+        <h2>빠른 등록</h2>
+        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="card" style="max-width: 960px; padding: 18px;">
+            <?php wp_nonce_field('catchpro_license_upsert', 'catchpro_license_nonce'); ?>
+            <input type="hidden" name="action" value="catchpro_license_upsert">
+            <input type="hidden" name="license_action" value="save">
+            <table class="form-table" role="presentation">
+                <tr>
+                    <th scope="row"><label for="catchpro_license_name">이름</label></th>
+                    <td><input id="catchpro_license_name" name="name" type="text" class="regular-text"></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="catchpro_license_phone">전화번호</label></th>
+                    <td><input id="catchpro_license_phone" name="phone" type="text" class="regular-text" placeholder="01012345678"></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="catchpro_license_email">이메일</label></th>
+                    <td><input id="catchpro_license_email" name="email" type="email" class="regular-text"></td>
+                </tr>
+                <tr>
+                    <th scope="row">상품</th>
+                    <td>
+                        <strong><?php echo esc_html(catchpro_apply_license_product_label()); ?></strong>
+                        <input type="hidden" name="edition" value="<?php echo esc_attr(catchpro_apply_license_product_code()); ?>">
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="catchpro_license_status">상태</label></th>
+                    <td>
+                        <select id="catchpro_license_status" name="status">
+                            <option value="trial">무료체험</option>
+                            <option value="active">정상구독</option>
+                            <option value="past_due">결제유예</option>
+                            <option value="expired">만료</option>
+                            <option value="blocked">차단</option>
+                        </select>
+                        <select name="extend_days">
+                            <option value="30">30일</option>
+                            <option value="7">7일</option>
+                            <option value="31">31일</option>
+                            <option value="0">만료일 유지</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="catchpro_license_memo">메모</label></th>
+                    <td><input id="catchpro_license_memo" name="memo" type="text" class="large-text" placeholder="예: 1개월 무료체험"></td>
+                </tr>
+            </table>
+            <?php submit_button('라이선스 등록/갱신'); ?>
+        </form>
+
+        <h2>라이선스 목록</h2>
+        <?php
+        $result = catchpro_apply_license_request('GET', '/api/license/list');
+        if (is_wp_error($result)) {
+            catchpro_apply_license_error_notice($result);
+            echo '<p>설정 > CatchPro 신청에서 라이선스 API 주소와 관리자 토큰을 확인하세요.</p>';
+        } else {
+            $licenses = isset($result['licenses']) && is_array($result['licenses']) ? $result['licenses'] : [];
+            if ($licenses === []) {
+                echo '<p>등록된 라이선스가 없습니다.</p>';
+            } else {
+                ?>
+                <table class="widefat striped">
+                    <thead>
+                    <tr>
+                        <th>고객</th>
+                        <th>상품</th>
+                        <th>상태</th>
+                        <th>만료일</th>
+                        <th>기기</th>
+                        <th>메모</th>
+                        <th>작업</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($licenses as $license) :
+                        $status = sanitize_text_field((string) ($license['status'] ?? ''));
+                        $days_remaining = $license['daysRemaining'] ?? null;
+                        ?>
+                        <tr>
+                            <td>
+                                <strong><?php echo esc_html((string) ($license['name'] ?? '-')); ?></strong><br>
+                                <?php echo esc_html((string) ($license['phone'] ?? '-')); ?><br>
+                                <?php echo esc_html((string) ($license['email'] ?? '-')); ?>
+                            </td>
+                            <td><?php echo esc_html(catchpro_apply_license_product_label()); ?></td>
+                            <td><?php echo esc_html(catchpro_apply_license_status_label($status)); ?></td>
+                            <td>
+                                <?php echo esc_html((string) ($license['expiresAt'] ?? '-')); ?><br>
+                                <span class="description">
+                                    <?php echo is_numeric($days_remaining) ? esc_html($days_remaining . '일 남음') : '만료일 없음'; ?>
+                                </span>
+                            </td>
+                            <td>
+                                <?php
+                                $device_count = (int) ($license['deviceCount'] ?? 0);
+                                $max_devices = (int) ($license['maxDevices'] ?? 2);
+                                echo esc_html($device_count > 0 ? '등록됨 ' . $device_count . '/' . $max_devices . '대' : '미등록');
+                                if (!empty($license['deviceIdSuffix'])) {
+                                    echo '<br><span class="description">' . esc_html((string) $license['deviceIdSuffix']) . '</span>';
+                                }
+                                ?>
+                            </td>
+                            <td><?php echo esc_html((string) ($license['memo'] ?? '')); ?></td>
+                            <td>
+                                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                                    <?php
+                                    catchpro_apply_license_row_button($license, 'extend_30', '1개월 연장', 'button-primary');
+                                    catchpro_apply_license_row_button($license, 'trial_30', '체험 30일');
+                                    catchpro_apply_license_row_button($license, 'reset_device', '기기 초기화');
+                                    catchpro_apply_license_row_button($license, 'expire', '만료 처리');
+                                    catchpro_apply_license_row_button($license, 'block', '차단');
+                                    ?>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php
+            }
+        }
+        ?>
+    </div>
+    <?php
+}
+
+function catchpro_apply_license_row_button(array $license, string $license_action, string $label, string $class = ''): void
+{
+    $button_class = trim('button ' . $class);
+    ?>
+    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+        <?php wp_nonce_field('catchpro_license_upsert', 'catchpro_license_nonce'); ?>
+        <input type="hidden" name="action" value="catchpro_license_upsert">
+        <input type="hidden" name="license_action" value="<?php echo esc_attr($license_action); ?>">
+        <input type="hidden" name="name" value="<?php echo esc_attr((string) ($license['name'] ?? '')); ?>">
+        <input type="hidden" name="phone" value="<?php echo esc_attr((string) ($license['phone'] ?? '')); ?>">
+        <input type="hidden" name="email" value="<?php echo esc_attr((string) ($license['email'] ?? '')); ?>">
+        <input type="hidden" name="edition" value="<?php echo esc_attr(catchpro_apply_license_product_code()); ?>">
+        <input type="hidden" name="status" value="<?php echo esc_attr((string) ($license['status'] ?? 'active')); ?>">
+        <input type="hidden" name="memo" value="<?php echo esc_attr((string) ($license['memo'] ?? '')); ?>">
+        <button class="<?php echo esc_attr($button_class); ?>" type="submit"><?php echo esc_html($label); ?></button>
+    </form>
+    <?php
 }
 
 function catchpro_apply_render_form($raw_atts = []): string
@@ -140,6 +501,8 @@ function catchpro_apply_render_form($raw_atts = []): string
         document.body.classList.add('catchpro-apply-page');
     </script>
     <style>
+        @import url("https://cdnjs.cloudflare.com/ajax/libs/pretendard/1.3.9/variable/pretendardvariable.css");
+
         .site-shell,
         body.catchpro-apply-page .site-shell {
             display: block !important;
@@ -175,12 +538,14 @@ function catchpro_apply_render_form($raw_atts = []): string
             --cp-muted: #5d6472;
             --cp-line: #dfe3ea;
             --cp-soft: #f7f8fb;
-            --cp-blue: #2d55ff;
-            --cp-blue-dark: #183fff;
+            --cp-blue: #6f73ff;
+            --cp-blue-dark: #5459e8;
+            --cp-blue-soft: #f2f3ff;
+            --cp-blue-line: #d9dcff;
             --cp-green: #158f72;
             --cp-radius: 8px;
             color: var(--cp-ink);
-            font-family: inherit;
+            font-family: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             line-height: 1.65;
             background: #fff;
         }
@@ -213,13 +578,48 @@ function catchpro_apply_render_form($raw_atts = []): string
             padding: 64px max(24px, calc((100vw - 1040px) / 2)) 52px;
         }
         .catchpro-apply__eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
             margin: 0 0 14px;
             color: var(--cp-blue);
-            font-size: 15px;
-            font-weight: 700;
+            font-size: 18px;
+            font-weight: 900;
             letter-spacing: 0;
             opacity: 0;
             animation: catchproFadeUp 0.55s ease forwards;
+        }
+        .catchpro-apply__brand-mark {
+            position: relative;
+            display: inline-flex;
+            width: 34px;
+            height: 34px;
+            flex: 0 0 34px;
+            border-radius: 11px;
+            background: linear-gradient(135deg, #8e90ff 0%, #6f73ff 50%, #b4a7ff 100%);
+            box-shadow: 0 10px 20px rgba(111, 115, 255, 0.22);
+        }
+        .catchpro-apply__brand-mark::before {
+            content: "";
+            position: absolute;
+            left: 10px;
+            top: 8px;
+            width: 14px;
+            height: 18px;
+            border-radius: 4px 11px 11px 4px;
+            background: rgba(255, 255, 255, 0.92);
+            transform: skewX(-14deg);
+        }
+        .catchpro-apply__brand-mark::after {
+            content: "";
+            position: absolute;
+            right: 7px;
+            bottom: 7px;
+            width: 9px;
+            height: 9px;
+            border-right: 3px solid rgba(255, 255, 255, 0.95);
+            border-bottom: 3px solid rgba(255, 255, 255, 0.95);
+            transform: rotate(-45deg);
         }
         .catchpro-apply__hero h1 {
             max-width: 780px;
@@ -262,12 +662,12 @@ function catchpro_apply_render_form($raw_atts = []): string
         }
         .catchpro-apply__button:hover {
             transform: translateY(-1px);
-            box-shadow: 0 8px 18px rgba(45, 85, 255, 0.16);
+            box-shadow: 0 8px 18px rgba(111, 115, 255, 0.18);
         }
         .catchpro-apply__button--ghost {
             background: #fff;
             color: var(--cp-blue);
-            border: 1px solid var(--cp-line);
+            border: 1px solid var(--cp-blue-line);
         }
         .catchpro-apply__button--kakao {
             background: #fee500;
@@ -331,7 +731,7 @@ function catchpro_apply_render_form($raw_atts = []): string
         }
         .catchpro-apply__panel:hover {
             transform: translateY(-2px);
-            border-color: #c4ccff;
+            border-color: var(--cp-blue-line);
             background: #fcfdff;
         }
         .catchpro-apply__panel h2,
@@ -353,9 +753,9 @@ function catchpro_apply_render_form($raw_atts = []): string
             min-height: 26px;
             margin-bottom: 12px;
             padding: 0 10px;
-            border: 1px solid rgba(45, 85, 255, 0.2);
+            border: 1px solid rgba(111, 115, 255, 0.22);
             border-radius: 999px;
-            background: #f4f6ff;
+            background: var(--cp-blue-soft);
             color: var(--cp-blue);
             font-size: 13px;
             font-weight: 900;
@@ -450,7 +850,7 @@ function catchpro_apply_render_form($raw_atts = []): string
         .catchpro-apply input:focus,
         .catchpro-apply select:focus,
         .catchpro-apply textarea:focus {
-            outline: 3px solid rgba(45, 85, 255, 0.14);
+            outline: 3px solid rgba(111, 115, 255, 0.16);
             border-color: var(--cp-blue);
         }
         .catchpro-apply__consent {
@@ -480,9 +880,9 @@ function catchpro_apply_render_form($raw_atts = []): string
             transition: transform 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
         }
         .catchpro-apply__submit:hover {
-            background: #1558b8;
+            background: var(--cp-blue-dark);
             transform: translateY(-1px);
-            box-shadow: 0 10px 20px rgba(45, 85, 255, 0.18);
+            box-shadow: 0 10px 20px rgba(111, 115, 255, 0.2);
         }
         .catchpro-apply__contact {
             display: grid;
@@ -593,10 +993,10 @@ function catchpro_apply_render_form($raw_atts = []): string
     </style>
     <div class="catchpro-apply">
         <section class="catchpro-apply__hero">
-            <p class="catchpro-apply__eyebrow">CatchPro Pro</p>
+            <p class="catchpro-apply__eyebrow"><span class="catchpro-apply__brand-mark" aria-hidden="true"></span><span>CatchPro Pro</span></p>
             <h1>운행에 필요한 기능만 골라 더 빠르게 시작하세요.</h1>
             <p class="catchpro-apply__lead">
-                인성 CatchPro Pro와 CatchPro Navi Pro는 사용하는 폰과 운행 방식에 따라 다르게 세팅됩니다.
+                CatchPro Pro는 인성 CatchPro Pro와 CatchPro Navi Pro를 함께 사용할 수 있는 통합 구독입니다.
                 신청서를 남겨주시면 설치 가능 여부와 사용 방법을 순서대로 안내해드립니다.
             </p>
             <div class="catchpro-apply__actions">
@@ -619,7 +1019,7 @@ function catchpro_apply_render_form($raw_atts = []): string
                 <h2 id="catchpro-fit-title" class="catchpro-apply__section-title">서비스 구성</h2>
                 <p class="catchpro-apply__section-copy">
                     오더를 잡는 폰과 지도를 보는 폰의 역할을 분리하면 운행 중 화면 전환이 줄어듭니다.
-                    필요한 기능을 확인한 뒤 가장 맞는 구성으로 안내합니다.
+                    필요한 기능을 확인한 뒤 운행 방식에 맞는 구성으로 안내합니다.
                 </p>
                 <div class="catchpro-apply__grid">
                     <article class="catchpro-apply__panel">
@@ -645,7 +1045,7 @@ function catchpro_apply_render_form($raw_atts = []): string
                 <div class="catchpro-apply__flow">
                     <div class="catchpro-apply__step">
                         <strong>1. 신청</strong>
-                        <span>운행 지역, 사용 기기, 필요한 버전을 남깁니다.</span>
+                        <span>운행 지역, 사용 기기, 필요한 기능을 남깁니다.</span>
                     </div>
                     <div class="catchpro-apply__step">
                         <strong>2. 확인</strong>
@@ -670,7 +1070,7 @@ function catchpro_apply_render_form($raw_atts = []): string
                 <div class="catchpro-apply__contact">
                     <div>
                         <strong>바로 상담이 필요하면 카카오톡으로 문의할 수 있습니다.</strong>
-                        <span>신청서를 함께 남겨주시면 기기와 버전 확인을 더 빠르게 진행할 수 있습니다.</span>
+                        <span>신청서를 함께 남겨주시면 기기와 사용 구성을 더 빠르게 확인할 수 있습니다.</span>
                     </div>
                     <?php if ($has_kakao) : ?>
                         <a class="catchpro-apply__contact-link" href="<?php echo esc_url($kakao_url); ?>" target="_blank" rel="noopener noreferrer">카카오톡 상담 열기</a>
@@ -703,13 +1103,7 @@ function catchpro_apply_render_form($raw_atts = []): string
                         </div>
                         <div class="catchpro-apply__field">
                             <label for="catchpro-version">희망 버전</label>
-                            <select id="catchpro-version" name="version" required>
-                                <option value="">선택</option>
-                                <option value="인성 CatchPro Pro">인성 CatchPro Pro</option>
-                                <option value="CatchPro Navi Pro">CatchPro Navi Pro</option>
-                                <option value="둘 다 상담">둘 다 상담</option>
-                                <option value="아직 모름">아직 모름</option>
-                            </select>
+                            <input id="catchpro-version" name="version" type="text" value="CatchPro" readonly required>
                         </div>
                         <div class="catchpro-apply__field">
                             <label for="catchpro-region">주 운행 지역</label>
@@ -837,5 +1231,98 @@ function catchpro_apply_handle_submit(): void
     }
 
     wp_safe_redirect(add_query_arg('catchpro_apply', 'success', $target) . '#catchpro-apply-form');
+    exit;
+}
+
+function catchpro_apply_handle_license_upsert(): void
+{
+    if (!current_user_can('manage_options')) {
+        wp_die('권한이 없습니다.', 'CatchPro 라이선스', ['response' => 403]);
+    }
+    if (!isset($_POST['catchpro_license_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['catchpro_license_nonce'])), 'catchpro_license_upsert')) {
+        wp_die('라이선스 요청 검증에 실패했습니다.', 'CatchPro 라이선스', ['response' => 403]);
+    }
+
+    $license_action = catchpro_apply_field('license_action');
+    $payload = [
+        'name' => catchpro_apply_field('name'),
+        'phone' => catchpro_apply_field('phone'),
+        'email' => sanitize_email(catchpro_apply_field('email')),
+        'edition' => catchpro_apply_license_product_code(),
+        'status' => catchpro_apply_field('status') ?: 'trial',
+        'memo' => catchpro_apply_field('memo'),
+        'allowDeviceBind' => true,
+        'maxDevices' => 2,
+    ];
+    $notice = 'saved';
+
+    if ($license_action === 'save') {
+        $extend_days = (int) catchpro_apply_field('extend_days');
+        if ($extend_days > 0) {
+            $payload['extendDays'] = $extend_days;
+        }
+    } elseif ($license_action === 'extend_30') {
+        $payload['status'] = 'active';
+        $payload['extendDays'] = 30;
+        $notice = 'extended';
+    } elseif ($license_action === 'trial_30') {
+        $payload['status'] = 'trial';
+        $payload['extendDays'] = 30;
+        $notice = 'extended';
+    } elseif ($license_action === 'reset_device') {
+        $payload['resetDevice'] = true;
+        $notice = 'device_reset';
+    } elseif ($license_action === 'expire') {
+        $payload['status'] = 'expired';
+        $payload['expiresAt'] = gmdate('c');
+        $notice = 'expired';
+    } elseif ($license_action === 'block') {
+        $payload['status'] = 'blocked';
+        $notice = 'blocked';
+    }
+
+    $result = catchpro_apply_license_request('POST', '/api/license/upsert', $payload);
+    if (is_wp_error($result)) {
+        wp_die(esc_html($result->get_error_message()), 'CatchPro 라이선스', ['response' => 500]);
+    }
+
+    wp_safe_redirect(add_query_arg('catchpro_license_notice', $notice, admin_url('edit.php?post_type=catchpro_application&page=catchpro-license-manager')));
+    exit;
+}
+
+function catchpro_apply_handle_license_from_application(): void
+{
+    if (!current_user_can('manage_options')) {
+        wp_die('권한이 없습니다.', 'CatchPro 라이선스', ['response' => 403]);
+    }
+    if (!isset($_POST['catchpro_license_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['catchpro_license_nonce'])), 'catchpro_license_from_application')) {
+        wp_die('라이선스 요청 검증에 실패했습니다.', 'CatchPro 라이선스', ['response' => 403]);
+    }
+
+    $post_id = (int) catchpro_apply_field('post_id');
+    if ($post_id <= 0 || get_post_type($post_id) !== 'catchpro_application') {
+        wp_die('신청 정보를 찾지 못했습니다.', 'CatchPro 라이선스', ['response' => 404]);
+    }
+
+    $payload = [
+        'name' => (string) get_post_meta($post_id, 'catchpro_name', true),
+        'phone' => (string) get_post_meta($post_id, 'catchpro_phone', true),
+        'email' => sanitize_email((string) get_post_meta($post_id, 'catchpro_email', true)),
+        'edition' => catchpro_apply_license_product_code(),
+        'status' => 'trial',
+        'extendDays' => 30,
+        'allowDeviceBind' => true,
+        'maxDevices' => 2,
+        'memo' => '신청서에서 통합 Pro 1개월 무료체험 등록',
+    ];
+    $result = catchpro_apply_license_request('POST', '/api/license/upsert', $payload);
+    if (is_wp_error($result)) {
+        wp_die(esc_html($result->get_error_message()), 'CatchPro 라이선스', ['response' => 500]);
+    }
+
+    update_post_meta($post_id, 'catchpro_license_registered_at', current_time('mysql'));
+    update_post_meta($post_id, 'catchpro_license_registered_editions', catchpro_apply_license_product_code());
+
+    wp_safe_redirect(add_query_arg('catchpro_license_notice', 'saved', get_edit_post_link($post_id, 'raw')));
     exit;
 }

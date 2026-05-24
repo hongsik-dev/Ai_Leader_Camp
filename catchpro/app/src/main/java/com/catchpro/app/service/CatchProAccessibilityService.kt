@@ -273,10 +273,11 @@ class CatchProAccessibilityService : AccessibilityService() {
         }
         val packageName = (root.packageName ?: event.packageName)?.toString().orEmpty()
         val isInsungPackage = isSupportedInsungPackage(packageName)
-        if (buildRunModeOverlaySignature(visible = isInsungPackage, settings = activeSettings) != lastRunModeOverlaySignature) {
+        val showRunModeOverlay = isRunModeOverlayPackage(packageName)
+        if (buildRunModeOverlaySignature(visible = showRunModeOverlay, settings = activeSettings) != lastRunModeOverlaySignature) {
             mainHandler.post {
                 updateRunModeOverlay(
-                    visible = isInsungPackage,
+                    visible = showRunModeOverlay,
                     settings = activeSettings,
                 )
             }
@@ -660,7 +661,13 @@ class CatchProAccessibilityService : AccessibilityService() {
     }
 
     private fun isSupportedInsungPackage(packageName: String): Boolean {
+        if (packageName.startsWith("com.catchpro.", ignoreCase = true)) return false
         return KoreanOrderDraftParser.supportsPackage(packageName)
+    }
+
+    private fun isRunModeOverlayPackage(packageName: String): Boolean {
+        return packageName.equals(InsungQuickPackage, ignoreCase = true) ||
+            packageName.startsWith("$InsungQuickPackage.", ignoreCase = true)
     }
 
     private fun isTmapPackage(packageName: String): Boolean {
@@ -4714,7 +4721,7 @@ class CatchProAccessibilityService : AccessibilityService() {
         val overlay = ensureRunModeOverlay()
         val autoConfirmAvailable = CatchProFeatureGate.autoConfirmAvailable(this)
         val autoEntryAvailable = CatchProFeatureGate.experimentalAutoDetailConfirmAvailable(this)
-        val awsSyncAvailable = CatchProFeatureGate.routeAddressCloudSyncAvailable(this)
+        val awsSyncAvailable = settings.routeAddressCloudSyncFeatureAvailable
         val autoConfirmOn = autoConfirmAvailable && settings.primaryAutoConfirmEnabled
         val autoEntryOn = autoEntryAvailable && settings.primaryOrderListAutoEntryEnabled
         val awsSyncOn = awsSyncAvailable && settings.routeAddressCloudSyncEnabled
@@ -4722,13 +4729,9 @@ class CatchProAccessibilityService : AccessibilityService() {
 
         overlay.statusView.visibility = View.GONE
         overlay.autoConfirmButton.isEnabled = autoConfirmAvailable
-        overlay.autoEntryButton.visibility = if (autoEntryAvailable) View.VISIBLE else View.GONE
+        overlay.autoEntryButton.visibility = View.GONE
         overlay.awsButton.visibility = if (awsSyncAvailable) View.VISIBLE else View.GONE
-        overlay.enableDriveModeButton.visibility = if (autoConfirmAvailable && autoEntryAvailable && !driveModeOn) {
-            View.VISIBLE
-        } else {
-            View.GONE
-        }
+        overlay.enableDriveModeButton.visibility = View.GONE
 
         if (autoConfirmAvailable) {
             tintRunModeButton(
@@ -4776,7 +4779,7 @@ class CatchProAccessibilityService : AccessibilityService() {
             BuildConfig.CATCHPRO_EDITION,
             CatchProFeatureGate.autoConfirmAvailable(this),
             CatchProFeatureGate.experimentalAutoDetailConfirmAvailable(this),
-            CatchProFeatureGate.routeAddressCloudSyncAvailable(this),
+            settings.routeAddressCloudSyncFeatureAvailable,
         ).joinToString("|")
     }
 
@@ -4818,7 +4821,7 @@ class CatchProAccessibilityService : AccessibilityService() {
             }
         }
         val awsButton = runModeButton {
-            if (!CatchProFeatureGate.routeAddressCloudSyncAvailable(this)) return@runModeButton
+            if (!activeSettings.routeAddressCloudSyncFeatureAvailable) return@runModeButton
             serviceScope.launch {
                 settingsRepository.setRouteAddressCloudSyncEnabled(!activeSettings.routeAddressCloudSyncEnabled)
             }

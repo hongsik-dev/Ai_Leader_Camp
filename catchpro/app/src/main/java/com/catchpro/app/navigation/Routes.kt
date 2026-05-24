@@ -35,6 +35,13 @@ val topLevelDestinations = listOf(
     TopLevelDestination(Routes.Settings, "설정", Icons.Outlined.Settings),
 )
 
+val insungFreeTopLevelDestinations = listOf(
+    TopLevelDestination(Routes.Dashboard, "대시보드", Icons.Outlined.Dashboard),
+    TopLevelDestination(Routes.Destinations, "Pro 체험하기", Icons.Outlined.Place),
+    TopLevelDestination(Routes.TmapQueue, "주소/네비", Icons.Outlined.Navigation),
+    TopLevelDestination(Routes.Settings, "설정", Icons.Outlined.Settings),
+)
+
 val guideTopLevelDestination = TopLevelDestination(
     Routes.Guide,
     "사용설명",

@@ -14,10 +14,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.catchpro.app.BuildConfig
 import com.catchpro.app.data.region.KoreaAdministrativeAreas
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.catchpro.app.data.repository.SettingsRepository
 import com.catchpro.app.feature.CatchProEdition
+import com.catchpro.app.ui.components.EmphasisSegment
+import com.catchpro.app.ui.components.EmphasisText
 import com.catchpro.app.ui.components.ScreenScaffold
 
 @Composable
@@ -28,19 +31,29 @@ fun DashboardScreen(
     onOpenTmapQueue: () -> Unit,
 ) {
     val settings = settingsRepository.settings.collectAsStateWithLifecycle(initialValue = null).value
+    val isInsungFree = BuildConfig.IS_FREE_EDITION && !BuildConfig.IS_NAVI_APP
 
     ScreenScaffold(
         title = "대시보드",
-        subtitle = "메인 오더를 잡고, 비슷한 목적지의 추가 오더를 빠르게 이어 붙이는 흐름을 한 화면에서 확인합니다.",
+        subtitle = if (isInsungFree) {
+            "Insung Free는 권한 확인과 Pro 체험 신청용입니다. 실제 오더확정 보조는 Insung Pro에서 제공합니다."
+        } else {
+            "메인 오더를 잡고, 비슷한 목적지의 추가 오더를 빠르게 이어 붙이는 흐름을 한 화면에서 확인합니다."
+        },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            DashboardGoalCard()
-            LiveConditionSummaryCard(
-                primaryEnabled = settings?.primaryAutoConfirmEnabled == true,
-                primaryDestinationKeywords = settings?.primaryDestinationKeywords.orEmpty(),
-                primaryMinimumPrice = settings?.primaryMinimumPriceText.orEmpty(),
-            )
+            DashboardGoalCard(isInsungFree = isInsungFree)
+            if (isInsungFree) {
+                FreeEditionSummaryCard()
+            } else {
+                LiveConditionSummaryCard(
+                    primaryEnabled = settings?.primaryAutoConfirmEnabled == true,
+                    primaryDestinationKeywords = settings?.primaryDestinationKeywords.orEmpty(),
+                    primaryMinimumPrice = settings?.primaryMinimumPriceText.orEmpty(),
+                )
+            }
             DashboardActionCard(
+                isInsungFree = isInsungFree,
                 onOpenDestinations = onOpenDestinations,
                 onReviewLatestMatch = onReviewLatestMatch,
                 onOpenTmapQueue = onOpenTmapQueue,
@@ -50,8 +63,10 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun DashboardGoalCard() {
+private fun DashboardGoalCard(isInsungFree: Boolean) {
     val firstGoal = when {
+        isInsungFree ->
+            "1. 설치 전 접근성/알림/위치 권한 흐름을 확인"
         CatchProEdition.experimentalAutoDetailConfirmAvailable ->
             "1. 인성 리스트에서 오더가 보이면 자동상세확정으로 빠르게 상세화면 진입"
         CatchProEdition.autoConfirmAvailable ->
@@ -59,10 +74,10 @@ private fun DashboardGoalCard() {
         else ->
             "1. 오더 조건을 저장하고 운행 전 기준을 확인"
     }
-    val secondGoal = if (CatchProEdition.autoConfirmAvailable) {
-        "2. 도착지 선택과 요금 조건이 맞으면 확인 팝업 없이 즉시 확정"
-    } else {
-        "2. 자동확정은 Pro 또는 개인 운행판에서 사용"
+    val secondGoal = when {
+        isInsungFree -> "2. 오더 조건과 오더확정 보조는 Pro에서 사용"
+        CatchProEdition.autoConfirmAvailable -> "2. 도착지 선택과 요금 조건이 맞으면 확인 팝업 없이 즉시 확정"
+        else -> "2. 자동확정은 Pro 또는 개인 운행판에서 사용"
     }
     Card {
         Column(
@@ -76,18 +91,43 @@ private fun DashboardGoalCard() {
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
-            Text(
-                text = firstGoal,
+            EmphasisText(
+                segments = firstGoal.toDashboardEmphasisSegments(),
                 style = MaterialTheme.typography.bodyLarge,
             )
-            Text(
-                text = secondGoal,
+            EmphasisText(
+                segments = secondGoal.toDashboardEmphasisSegments(),
                 style = MaterialTheme.typography.bodyLarge,
             )
-            Text(
-                text = "3. 상세주소는 TMAP 연결 탭에 저장해 TMAP 실행과 운행 후 주소 분석에 사용",
+            EmphasisText(
+                segments = if (isInsungFree) {
+                    "3. 지도/네비 운행은 Navi Free, 오더확정 보조는 Insung Pro로 분리"
+                } else {
+                    "3. 상세주소는 TMAP 연결 탭에 저장해 TMAP 실행과 운행 후 주소 분석에 사용"
+                }.toDashboardEmphasisSegments(),
                 style = MaterialTheme.typography.bodyLarge,
             )
+        }
+    }
+}
+
+@Composable
+private fun FreeEditionSummaryCard() {
+    Card {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "Free 기능 범위",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            SummaryRow("오더 조건", "Pro 기능")
+            SummaryRow("오더확정 보조", "Pro 기능")
+            SummaryRow("Free 용도", "권한 확인 / Pro 체험 신청")
         }
     }
 }
@@ -151,6 +191,7 @@ private fun SummaryRow(
 
 @Composable
 private fun DashboardActionCard(
+    isInsungFree: Boolean,
     onOpenDestinations: () -> Unit,
     onReviewLatestMatch: () -> Unit,
     onOpenTmapQueue: () -> Unit,
@@ -167,8 +208,12 @@ private fun DashboardActionCard(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
-            Text(
-                text = "오더 조건에서 자동확정 규칙을 관리하고, TMAP 연결에서 상세주소와 네비 연결을 관리하세요.",
+            EmphasisText(
+                segments = if (isInsungFree) {
+                    "Free에서는 오더 조건을 실행하지 않습니다. Pro 체험 신청을 확인하거나 주소/네비 화면을 점검하세요."
+                } else {
+                    "오더 조건에서 자동확정 규칙을 관리하고, TMAP 연결에서 상세주소와 네비 연결을 관리하세요."
+                }.toDashboardEmphasisSegments(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -176,7 +221,7 @@ private fun DashboardActionCard(
                 onClick = onOpenDestinations,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("오더 조건 열기")
+                Text(if (isInsungFree) "Pro 체험하기" else "오더 조건 열기")
             }
             OutlinedButton(
                 onClick = onOpenTmapQueue,
@@ -192,4 +237,45 @@ private fun DashboardActionCard(
             }
         }
     }
+}
+
+private fun String.toDashboardEmphasisSegments(): List<EmphasisSegment> {
+    val keywords = listOf(
+        "자동으로 확정",
+        "자동상세확정",
+        "자동확정",
+        "오더확정 보조",
+        "오더 조건",
+        "Pro 체험 신청",
+        "Insung Pro",
+        "Navi Free",
+        "도착지 선택",
+        "요금 조건",
+        "TMAP 연결",
+        "상세주소",
+        "네비 연결",
+    )
+    val segments = mutableListOf<EmphasisSegment>()
+    var cursor = 0
+    while (cursor < length) {
+        val next = keywords
+            .mapNotNull { keyword ->
+                val index = indexOf(keyword, startIndex = cursor)
+                if (index >= 0) index to keyword else null
+            }
+            .minByOrNull { it.first }
+
+        if (next == null) {
+            segments += EmphasisSegment(substring(cursor))
+            break
+        }
+
+        val (index, keyword) = next
+        if (index > cursor) {
+            segments += EmphasisSegment(substring(cursor, index))
+        }
+        segments += EmphasisSegment(keyword, highlighted = true)
+        cursor = index + keyword.length
+    }
+    return segments
 }
