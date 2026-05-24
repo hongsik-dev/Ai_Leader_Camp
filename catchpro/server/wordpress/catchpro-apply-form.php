@@ -2,7 +2,7 @@
 /**
  * Plugin Name: CatchPro Apply Form
  * Description: 상담형 CatchPro Pro 신청 폼과 관리자 저장소를 제공합니다.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: CatchPro
  */
 
@@ -16,6 +16,7 @@ add_action('admin_post_nopriv_catchpro_apply_submit', 'catchpro_apply_handle_sub
 add_action('admin_post_catchpro_apply_submit', 'catchpro_apply_handle_submit');
 add_action('admin_menu', 'catchpro_apply_register_settings_page');
 add_action('admin_init', 'catchpro_apply_register_settings');
+add_filter('body_class', 'catchpro_apply_body_class');
 
 function catchpro_apply_register_post_type(): void
 {
@@ -47,6 +48,16 @@ function catchpro_apply_field(string $key): string
 function catchpro_apply_textarea(string $key): string
 {
     return isset($_POST[$key]) ? sanitize_textarea_field(wp_unslash($_POST[$key])) : '';
+}
+
+function catchpro_apply_body_class(array $classes): array
+{
+    $post = get_post();
+    if ((is_page('catchpro-pro-apply')) || ($post && has_shortcode((string) $post->post_content, 'catchpro_apply_form'))) {
+        $classes[] = 'catchpro-apply-page';
+    }
+
+    return array_values(array_unique($classes));
 }
 
 function catchpro_apply_register_settings_page(): void
@@ -124,7 +135,38 @@ function catchpro_apply_render_form($raw_atts = []): string
 
     ob_start();
     ?>
+    <script>
+        document.body.classList.add('catchpro-apply-page');
+    </script>
     <style>
+        .site-shell,
+        body.catchpro-apply-page .site-shell {
+            display: block !important;
+            max-width: none !important;
+            width: 100% !important;
+            margin: 0 !important;
+        }
+        .site-header,
+        .single-header,
+        body.catchpro-apply-page .site-header,
+        body.catchpro-apply-page .single-header {
+            display: none !important;
+        }
+        #content,
+        .single-article,
+        .entry-content,
+        body.catchpro-apply-page #content,
+        body.catchpro-apply-page .single-article,
+        body.catchpro-apply-page .entry-content {
+            max-width: none !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .entry-content > *,
+        body.catchpro-apply-page .entry-content > * {
+            max-width: none !important;
+        }
         .catchpro-apply {
             --cp-ink: #15191f;
             --cp-muted: #5e6876;
@@ -144,7 +186,7 @@ function catchpro_apply_render_form($raw_atts = []): string
         .catchpro-apply__hero {
             background: linear-gradient(135deg, #0f1724 0%, #17324f 58%, #0f5b83 100%);
             color: #fff;
-            margin: -24px calc(50% - 50vw) 0;
+            margin: 0 calc(50% - 50vw) 0;
             padding: 72px max(24px, calc((100vw - 1040px) / 2)) 64px;
         }
         .catchpro-apply__eyebrow {
