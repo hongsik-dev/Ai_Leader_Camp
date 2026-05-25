@@ -57,6 +57,14 @@ node .\scripts\notion\catchpro-notion-tasks.mjs update --title "Navi Pro AWS 동
 node .\scripts\notion\catchpro-notion-tasks.mjs list --status "진행중"
 ```
 
+운영 처리 기록:
+
+```powershell
+node .\scripts\notion\catchpro-ops-log.mjs license --action trial --customer "홍길동" --contact "01012345678" --device "R3CN607EZ0B" --memo "30일 체험 시작" --dry-run
+```
+
+`catchpro-ops-log.mjs`는 고객명, 연락처, 이메일, 기기값을 마스킹해서 기록한다. 라이선스, WordPress 신청, 카카오 챗봇, AWS 서버, 블로그, APK 배포 작업은 이 스크립트로 운영 이력을 남긴다.
+
 ## Operating Rule
 
 - 작업 시작 전 Notion에 과제를 등록한다.

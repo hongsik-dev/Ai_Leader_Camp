@@ -69,6 +69,8 @@ CatchPro 작업본부는 개발, 배포, 고객 신청, 라이선스, 상담, �
 - 민감정보는 GitHub와 Notion에 직접 저장하지 않는다.
 - Free/Pro 권한 변경 시 사용설명과 신청 페이지 문구를 같이 점검한다.
 - Insung hot path에는 지도, 네트워크, 무거운 DB 작업을 넣지 않는다.
+- 고객 신청, 라이선스, 챗봇, 서버, 블로그, APK 배포 처리 결과는 [운영 로그 Notion 기록](./catchpro-ops-notion-log.md) 절차로 남긴다.
+- 운영 로그에는 연락처, 이메일, 기기 ID, API key, token 원문을 남기지 않는다.
 
 ## 당장 진행할 작업
 
@@ -76,3 +78,13 @@ CatchPro 작업본부는 개발, 배포, 고객 신청, 라이선스, 상담, �
 - Notion CLI 상세 페이지 기록 기능 강화
 - AWS 라이선스/챗봇 변경 이력 Notion 연동
 - WordPress 신청 접수 처리 흐름 Notion 연동
+
+## 운영 로그 명령
+
+작업이 끝났을 때 아래 스크립트로 Notion에 처리 기록을 남긴다.
+
+```powershell
+node catchpro/scripts/notion/catchpro-ops-log.mjs license --action trial --customer "홍길동" --contact "01012345678" --device "R3CN607EZ0B" --memo "30일 체험 시작" --dry-run
+```
+
+검증 후 `--dry-run`을 빼면 실제 Notion 작업본부에 기록된다.
