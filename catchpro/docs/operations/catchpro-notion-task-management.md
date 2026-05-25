@@ -1,6 +1,7 @@
 # CatchPro Notion Task Management
 
 CatchPro 업데이트 과제는 Notion의 `CatchPro 작업 관리` 데이터베이스에서 관리한다.
+기본 운영 화면은 Notion 모바일이며, CLI는 보조 도구다.
 
 ## Notion Database
 
@@ -19,7 +20,15 @@ $env:NOTION_DATABASE_ID = "36bd426b-def3-810d-9a95-dbb02d1aaf7f"
 
 운영 전 토큰이 노출됐거나 공유됐다면 Notion Integration에서 토큰을 재발급한다.
 
-## Commands
+## Mobile First Rule
+
+- 작업 등록, 우선순위 변경, 완료 체크는 Notion 모바일에서 먼저 처리한다.
+- 라이선스 운영은 [Notion 모바일 라이선스 처리](./catchpro-notion-license-mobile-workflow.md)를 기준으로 한다.
+- PowerShell CLI는 대량 등록, 장애 대응, dry-run 검증 때만 사용한다.
+
+## Backup CLI Commands
+
+아래 명령은 PC에서 빠르게 보정할 때 쓰는 보조 명령이다. 일상 운영의 기준은 Notion 모바일이다.
 
 작업 등록:
 

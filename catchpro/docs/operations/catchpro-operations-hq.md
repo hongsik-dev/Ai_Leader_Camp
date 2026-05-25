@@ -31,6 +31,19 @@ CatchPro 작업본부는 개발, 배포, 고객 신청, 라이선스, 상담, �
 7. 고객에게 설명이 필요한 변경은 WordPress 블로그로 남긴다.
 8. Notion 작업을 완료 체크한다.
 
+## 모바일 라이선스 운영 흐름
+
+고객 체험, 연장, 만료, 차단, 기기 초기화는 PC 명령어가 아니라 Notion 모바일을 기본으로 처리한다.
+
+1. Notion의 라이선스 운영 데이터베이스에서 고객 행을 연다.
+2. `요청작업`을 선택한다.
+3. `처리상태`를 `대기`로 둔다.
+4. `실행` 체크박스를 켠다.
+5. AWS 서버가 `/api/notion/license-command`에서 webhook을 받아 라이선스를 처리한다.
+6. 처리 결과는 Notion의 `처리상태`, `처리결과`, `만료일`, 하위 페이지 로그에 자동 기록된다.
+
+자세한 설정은 [Notion 모바일 라이선스 처리](./catchpro-notion-license-mobile-workflow.md)를 따른다.
+
 ## 작업 분류
 
 ### P0
@@ -71,7 +84,8 @@ CatchPro 작업본부는 개발, 배포, 고객 신청, 라이선스, 상담, �
 - Insung hot path에는 지도, 네트워크, 무거운 DB 작업을 넣지 않는다.
 - 고객 신청, 라이선스, 챗봇, 서버, 블로그, APK 배포 처리 결과는 [운영 로그 Notion 기록](./catchpro-ops-notion-log.md) 절차로 남긴다.
 - 운영 로그에는 연락처, 이메일, 기기 ID, API key, token 원문을 남기지 않는다.
-- 고객 구독 연장, 체험 시작, 만료, 차단, 기기 초기화는 [라이선스 관리 CLI](./catchpro-license-admin-cli.md) 또는 WordPress 라이선스 관리 화면으로 처리한다.
+- 고객 구독 연장, 체험 시작, 만료, 차단, 기기 초기화는 Notion 모바일 라이선스 처리를 기본으로 한다.
+- [라이선스 관리 CLI](./catchpro-license-admin-cli.md)와 WordPress 라이선스 관리 화면은 장애 대응/백업 운영으로만 사용한다.
 
 ## 당장 진행할 작업
 
@@ -90,9 +104,9 @@ node catchpro/scripts/notion/catchpro-ops-log.mjs license --action trial --custo
 
 검증 후 `--dry-run`을 빼면 실제 Notion 작업본부에 기록된다.
 
-## 라이선스 운영 명령
+## 라이선스 백업 운영 명령
 
-WordPress 관리자 화면을 열기 어려운 경우 로컬 CLI로 처리한다.
+Notion webhook이나 WordPress 관리자 화면을 사용할 수 없는 경우 로컬 CLI로 처리한다.
 
 ```powershell
 node catchpro/scripts/license/catchpro-license-admin.mjs list --within-days 7
