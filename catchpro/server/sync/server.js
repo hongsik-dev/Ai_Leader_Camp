@@ -728,7 +728,7 @@ async function handleNotionLicenseCommand(req, res, url) {
 
   const payload = parsed.body;
   if (payload && payload.verification_token) {
-    console.log(`NOTION_WEBHOOK_VERIFICATION token=${payload.verification_token}`);
+    console.log(`NOTION_WEBHOOK_VERIFICATION tokenHash=${sha256(payload.verification_token)}`);
     sendJson(res, 200, { ok: true, verification: true });
     return true;
   }

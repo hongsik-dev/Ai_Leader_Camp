@@ -105,11 +105,14 @@ X-CatchPro-Notion-Token: <CATCHPRO_NOTION_WEBHOOK_SECRET>
 서버 배포 후 아래 순서로 확인한다.
 
 1. `GET /api/notion/license-command`가 `configured: true`를 반환하는지 확인한다.
-2. Notion webhook 구독 생성 시 서버 로그에서 `NOTION_WEBHOOK_VERIFICATION` 토큰을 확인한다.
-3. 해당 토큰을 Notion webhook 검증 화면에 입력한다.
-4. 테스트 고객 행에서 `30일 체험`과 `실행`을 체크한다.
-5. Notion 행이 `완료`로 바뀌고 `만료일`이 들어가는지 확인한다.
-6. 앱에서 같은 연락처로 라이선스 확인이 되는지 확인한다.
+2. Notion Automation의 webhook action에서 `POST /api/notion/license-command`를 호출한다.
+3. 요청 헤더에 `X-CatchPro-Notion-Token` 값을 넣는다.
+4. webhook body에는 page id가 들어가도록 설정한다. 예: `{ "page_id": "{{Page ID}}" }`
+5. 테스트 고객 행에서 `30일 체험`과 `실행`을 체크한다.
+6. Notion 행이 `완료`로 바뀌고 `만료일`이 들어가는지 확인한다.
+7. 앱에서 같은 연락처로 라이선스 확인이 되는지 확인한다.
+
+서버 로그에는 verification token 원문을 남기지 않고 hash만 남긴다.
 
 ## CLI Role
 
