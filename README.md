@@ -1,19 +1,23 @@
 # Ai_Leader_Camp
 
-AI 리더 캠프 학습 과정을 기록하기 위한 WordPress 블로그 테마와 초기 콘텐츠입니다.
+CatchPro Android 앱, AWS 동기화 서버, WordPress 운영 자료를 함께 관리하는 저장소입니다.
 
-## 구성
+## 정식 소스 위치
 
-- `hongsik-log/`: AI 리더 캠프 학습 기록용 미니멀 WordPress 테마
-- `wp-content-seed/`: About 페이지와 첫 글 초기 콘텐츠
+- `catchpro/`: CatchPro Android 앱, 서버 코드, 운영 문서의 기준 위치
+- `hongsik-log/`: hongsik.blog WordPress 테마
+- `wp-content-seed/`: WordPress 초기 콘텐츠 자료
 
-## 서버
+새로운 CatchPro 코드 수정은 항상 `catchpro/` 하위에서 진행합니다. 루트에 생긴 `app/`, `docs/`, `gradle/` 같은 복사본은 기준 소스가 아니므로 작업 전에 감사해야 합니다.
 
-- WordPress: Bitnami WordPress
-- Theme: `Hongsik Log`
+## 작업트리 관리
+
+- 기준 문서: `catchpro/docs/operations/catchpro-worktree-management.md`
+- 감사 스크립트: `catchpro/scripts/workspace/catchpro-worktree-audit.ps1`
+- 로컬 APK, DB, 로그, 스크린샷, Gradle cache, 휴대폰 추출 파일은 Git에 올리지 않습니다.
+- 토큰, API key, pem 파일은 저장소에 저장하지 않습니다.
 
 ## 운영 메모
 
-글에는 실제로 사용한 태그만 붙입니다. 빈 태그는 화면에 노출하지 않습니다.
-학습 기록은 하루에 한 개씩 예약 발행합니다. 새 글은 가장 늦은 발행/예약일 다음날 오전 9시로 예약합니다.
-워밍업 글은 `워밍업 칼럼`, AI 트랙 학습 글은 `학습 AI트랙` 카테고리로 분류합니다.
+WordPress 글에는 실제로 사용한 태그만 붙입니다. 빈 태그는 화면에 노출하지 않습니다.
+CatchPro 개발 기록과 배포 기록은 GitHub, Notion, WordPress를 함께 사용해 추적합니다.

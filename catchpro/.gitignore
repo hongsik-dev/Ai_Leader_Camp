@@ -10,6 +10,9 @@
 .tmp-debug/
 
 local.properties
+.env
+.env.*
+!.env.example
 
 build/
 **/build/

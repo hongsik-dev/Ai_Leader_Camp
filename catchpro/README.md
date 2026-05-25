@@ -7,6 +7,13 @@ Android project scaffold for the CatchPro return-route assistant.
 - [사용설명서](./사용설명서.md)
 - [작업기록](./작업기록.md)
 - [Gemini 하이브리드 판단 계획서](./Gemini하이브리드판단계획서.md)
+- [CatchPro 작업본부](./docs/operations/catchpro-operations-hq.md)
+- [GitHub 운영 규칙](./docs/operations/catchpro-github-release-process.md)
+- [Notion 작업 관리](./docs/operations/catchpro-notion-task-management.md)
+- [Notion 모바일 라이선스 처리](./docs/operations/catchpro-notion-license-mobile-workflow.md)
+- [운영 로그 Notion 기록](./docs/operations/catchpro-ops-notion-log.md)
+- [라이선스 관리 CLI](./docs/operations/catchpro-license-admin-cli.md)
+- [작업트리 관리](./docs/operations/catchpro-worktree-management.md)
 
 ## Current scope
 

@@ -31,9 +31,16 @@ const LICENSE_PRODUCT_EDITION = "catchpro-pro";
 const LICENSE_APP_EDITIONS = new Set([LICENSE_PRODUCT_EDITION, "insung-pro", "navi-pro"]);
 const DEFAULT_LICENSE_MAX_DEVICES = 2;
 const CATCHPRO_APPLY_URL = process.env.CATCHPRO_APPLY_URL || "https://hongsik.blog/catchpro-pro-apply/";
+const NOTION_API_BASE = "https://api.notion.com/v1";
+const NOTION_VERSION = process.env.NOTION_VERSION || "2022-06-28";
+const NOTION_TOKEN = process.env.NOTION_TOKEN || "";
+const NOTION_LICENSE_DATABASE_ID = process.env.NOTION_LICENSE_DATABASE_ID || "";
+const NOTION_WEBHOOK_VERIFICATION_TOKEN = process.env.NOTION_WEBHOOK_VERIFICATION_TOKEN || "";
+const NOTION_WEBHOOK_SHARED_SECRET = process.env.CATCHPRO_NOTION_WEBHOOK_SECRET || process.env.NOTION_WEBHOOK_SECRET || "";
 const rooms = new Map();
 const responseCache = new Map();
 const rateLimits = new Map();
+const notionCommandDedup = new Map();
 let redisClient = null;
 let redisReady = false;
 let redisLastErrorLogAt = 0;
@@ -81,6 +88,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (await handleLicenseApi(req, res, url)) {
+      return;
+    }
+    if (await handleNotionLicenseCommand(req, res, url)) {
       return;
     }
     if (await handleKakaoChatbot(req, res, url)) {
@@ -672,6 +682,431 @@ async function readJsonBody(req, maxBytes) {
   } catch {
     return null;
   }
+}
+
+async function readJsonBodyWithRaw(req, maxBytes) {
+  let size = 0;
+  const chunks = [];
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maxBytes) return null;
+    chunks.push(chunk);
+  }
+  const raw = Buffer.concat(chunks).toString("utf8");
+  try {
+    return { body: JSON.parse(raw || "{}"), raw };
+  } catch {
+    return null;
+  }
+}
+
+async function handleNotionLicenseCommand(req, res, url) {
+  if (url.pathname !== "/api/notion/license-command") return false;
+
+  if (req.method === "GET") {
+    sendJson(res, 200, {
+      ok: true,
+      service: "catchpro-notion-license-command",
+      configured: Boolean(NOTION_TOKEN),
+      databaseConfigured: Boolean(NOTION_LICENSE_DATABASE_ID),
+      signatureConfigured: Boolean(NOTION_WEBHOOK_VERIFICATION_TOKEN),
+      sharedSecretConfigured: Boolean(NOTION_WEBHOOK_SHARED_SECRET),
+    });
+    return true;
+  }
+
+  if (req.method !== "POST") {
+    sendJson(res, 405, { ok: false, error: "method not allowed" });
+    return true;
+  }
+
+  const parsed = await readJsonBodyWithRaw(req, 128 * 1024);
+  if (!parsed) {
+    sendJson(res, 400, { ok: false, error: "invalid json body" });
+    return true;
+  }
+
+  const payload = parsed.body;
+  if (payload && payload.verification_token) {
+    console.log(`NOTION_WEBHOOK_VERIFICATION tokenHash=${sha256(payload.verification_token)}`);
+    sendJson(res, 200, { ok: true, verification: true });
+    return true;
+  }
+
+  if (!notionWebhookAllowed(req, url, parsed.raw)) {
+    sendJson(res, 403, { ok: false, error: "notion webhook verification failed" });
+    return true;
+  }
+
+  const pageIds = extractNotionPageIds(payload);
+  if (pageIds.length === 0) {
+    sendJson(res, 400, { ok: false, error: "page id is required" });
+    return true;
+  }
+
+  const results = [];
+  for (const pageId of pageIds.slice(0, 10)) {
+    try {
+      results.push(await processNotionLicenseCommand(pageId));
+    } catch (error) {
+      console.warn(`NOTION_LICENSE_COMMAND_FAILED page=${shortHash(pageId)} reason=${error.message || "unknown"}`);
+      results.push({ ok: false, pageId: shortHash(pageId), error: "processing failed" });
+    }
+  }
+  sendJson(res, 200, { ok: true, results });
+  return true;
+}
+
+function notionWebhookAllowed(req, url, rawBody) {
+  const sharedSecret = String(NOTION_WEBHOOK_SHARED_SECRET || "");
+  const requestSecret = String(
+    req.headers["x-catchpro-notion-token"] ||
+    req.headers["x-notion-webhook-token"] ||
+    url.searchParams.get("token") ||
+    "",
+  );
+  if (sharedSecret && requestSecret && safeEquals(sharedSecret, requestSecret)) {
+    return true;
+  }
+
+  const verificationToken = String(NOTION_WEBHOOK_VERIFICATION_TOKEN || "");
+  const signature = String(req.headers["x-notion-signature"] || "");
+  if (!verificationToken || !signature) return false;
+  const expected = `sha256=${crypto.createHmac("sha256", verificationToken).update(rawBody).digest("hex")}`;
+  return safeEquals(expected, signature);
+}
+
+function safeEquals(a, b) {
+  const left = Buffer.from(String(a));
+  const right = Buffer.from(String(b));
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+function extractNotionPageIds(payload) {
+  const ids = [];
+  const add = (value) => {
+    const id = sanitizeNotionId(value);
+    if (id && !ids.includes(id)) ids.push(id);
+  };
+  const visit = (value) => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    add(value.page_id || value.pageId);
+    if (value.entity?.type === "page" || value.entity?.object === "page") add(value.entity.id);
+    if (value.data?.id) add(value.data.id);
+    if (value.page?.id) add(value.page.id);
+    if (value.object === "page") add(value.id);
+    if (Array.isArray(value.events)) value.events.forEach(visit);
+  };
+  visit(payload);
+  return ids;
+}
+
+async function processNotionLicenseCommand(pageId) {
+  if (!NOTION_TOKEN) {
+    throw new Error("notion token is not configured");
+  }
+
+  const page = await notionRequest("GET", `/pages/${pageId}`);
+  const databaseId = sanitizeNotionId(notionPageDatabaseId(page));
+  const configuredDatabaseId = sanitizeNotionId(NOTION_LICENSE_DATABASE_ID);
+  if (configuredDatabaseId && databaseId && configuredDatabaseId !== databaseId) {
+    return { ok: true, skipped: true, reason: "different database", pageId: shortHash(pageId) };
+  }
+
+  const editedAt = sanitizeLicenseText(page.last_edited_time);
+  const dedupKey = `${pageId}:${editedAt}`;
+  if (notionCommandDedup.has(dedupKey)) {
+    return { ok: true, skipped: true, reason: "duplicate event", pageId: shortHash(pageId) };
+  }
+  rememberNotionCommand(dedupKey);
+
+  const run = notionPropertyCheckbox(page, ["실행", "처리", "승인"]);
+  const state = normalizeKorean(notionPropertyText(page, ["처리상태", "상태"]));
+  if (!run || !notionCommandPending(state)) {
+    return { ok: true, skipped: true, reason: "not executable", pageId: shortHash(pageId) };
+  }
+
+  await updateNotionCommandPage(page, {
+    status: "처리중",
+    result: "서버에서 라이선스 작업을 처리하고 있습니다.",
+    processedAt: new Date().toISOString(),
+  });
+
+  const commandText = notionPropertyText(page, ["요청작업", "작업", "라이선스작업"]);
+  const command = parseNotionLicenseCommand(commandText);
+  if (!command) {
+    return failNotionLicenseCommand(page, `지원하지 않는 요청작업입니다: ${commandText || "비어 있음"}`);
+  }
+
+  const email = sanitizeEmail(notionPropertyText(page, ["이메일", "Email"]));
+  const phone = normalizePhone(notionPropertyText(page, ["연락처", "전화번호", "휴대폰"]));
+  const name = sanitizeLicenseText(notionPropertyText(page, ["고객명", "이름", "Name"]));
+  const memo = sanitizeLicenseText(notionPropertyText(page, ["메모", "비고"]));
+  const maxDevices = sanitizeMaxDevices(notionPropertyNumber(page, ["최대기기수", "등록기기수"]) || DEFAULT_LICENSE_MAX_DEVICES);
+
+  if (!email && !phone) {
+    return failNotionLicenseCommand(page, "이메일 또는 연락처가 필요합니다.");
+  }
+
+  let result;
+  if (command.type === "register-device") {
+    const deviceId = sanitizeDeviceId(notionPropertyText(page, ["기기ID", "기기", "Device ID"]));
+    const edition = parseNotionAppEdition(notionPropertyText(page, ["등록앱", "앱", "버전"])) || "insung-pro";
+    if (!deviceId) {
+      return failNotionLicenseCommand(page, "기기 수동등록에는 기기ID가 필요합니다.");
+    }
+    result = await registerLicenseDevice({ edition, email, phone, deviceId });
+  } else {
+    result = await upsertLicense({
+      edition: LICENSE_PRODUCT_EDITION,
+      email,
+      phone,
+      name,
+      status: command.status,
+      extendDays: command.extendDays,
+      expiresAt: command.expiresAt,
+      resetDevice: command.resetDevice,
+      allowDeviceBind: command.allowDeviceBind,
+      maxDevices,
+      memo: [memo, command.memo].filter(Boolean).join(" / "),
+    });
+  }
+
+  if (!result.ok) {
+    return failNotionLicenseCommand(page, result.error || "라이선스 처리 실패");
+  }
+
+  const license = result.license || {};
+  const resultText = [
+    `${command.label} 완료`,
+    license.expiresAt ? `만료일 ${license.expiresAt.slice(0, 10)}` : "",
+    Number.isFinite(Number(license.deviceCount)) ? `등록기기 ${license.deviceCount}/${license.maxDevices}` : "",
+  ].filter(Boolean).join(" · ");
+
+  await updateNotionCommandPage(page, {
+    run: false,
+    status: "완료",
+    result: resultText,
+    expiresAt: license.expiresAt || "",
+    processedAt: new Date().toISOString(),
+  });
+  await appendNotionCommandLog(page.id, `${resultText}\n고객정보는 서버 로그에 원문으로 남기지 않습니다.`);
+  console.log(`NOTION_LICENSE_COMMAND_DONE action=${command.type} page=${shortHash(pageId)} customerHash=${sha256(`${email}|${phone}`)}`);
+  return { ok: true, pageId: shortHash(pageId), action: command.type, result: resultText };
+}
+
+function notionCommandPending(state) {
+  return !state || ["대기", "pending", "todo", "ready"].includes(state);
+}
+
+function parseNotionLicenseCommand(value) {
+  const text = normalizeKorean(value);
+  if (!text) return null;
+  if (text.includes("체험") || text.includes("trial")) {
+    return { type: "trial", label: "30일 체험", status: "trial", extendDays: 30, memo: "Notion 모바일 30일 체험" };
+  }
+  if (text.includes("연장") || text.includes("renew") || text.includes("extend")) {
+    return { type: "extend", label: "1개월 연장", status: "active", extendDays: 30, memo: "Notion 모바일 1개월 연장" };
+  }
+  if (text.includes("기기초기화") || text.includes("초기화") || text.includes("reset")) {
+    return { type: "reset-device", label: "기기 초기화", status: "active", resetDevice: true, allowDeviceBind: true, memo: "Notion 모바일 기기 초기화" };
+  }
+  if (text.includes("만료") || text.includes("expire")) {
+    return { type: "expire", label: "만료 처리", status: "expired", expiresAt: new Date().toISOString(), memo: "Notion 모바일 만료 처리" };
+  }
+  if (text.includes("차단") || text.includes("block")) {
+    return { type: "block", label: "차단", status: "blocked", memo: "Notion 모바일 차단" };
+  }
+  if (text.includes("수동등록") || text.includes("기기등록") || text.includes("registerdevice")) {
+    return { type: "register-device", label: "기기 수동등록" };
+  }
+  return null;
+}
+
+function parseNotionAppEdition(value) {
+  const text = normalizeKorean(value);
+  if (text.includes("navi") || text.includes("네비") || text.includes("지도")) return "navi-pro";
+  if (text.includes("insung") || text.includes("인성")) return "insung-pro";
+  return normalizeLicenseAppEdition(value);
+}
+
+async function failNotionLicenseCommand(page, message) {
+  await updateNotionCommandPage(page, {
+    run: false,
+    status: "실패",
+    result: message,
+    processedAt: new Date().toISOString(),
+  });
+  await appendNotionCommandLog(page.id, `실패: ${message}`);
+  console.warn(`NOTION_LICENSE_COMMAND_REJECTED page=${shortHash(page.id)} reason=${message.replace(/\s+/g, "_").slice(0, 80)}`);
+  return { ok: false, pageId: shortHash(page.id), error: message };
+}
+
+function rememberNotionCommand(key) {
+  notionCommandDedup.set(key, Date.now() + 10 * 60 * 1000);
+  if (notionCommandDedup.size > 500) {
+    const now = Date.now();
+    for (const [item, expiresAt] of notionCommandDedup) {
+      if (expiresAt <= now || notionCommandDedup.size > 300) notionCommandDedup.delete(item);
+    }
+  }
+}
+
+async function notionRequest(method, apiPath, body) {
+  const response = await fetch(`${NOTION_API_BASE}${apiPath}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${NOTION_TOKEN}`,
+      "Notion-Version": NOTION_VERSION,
+      "Content-Type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await response.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
+  if (!response.ok) {
+    throw new Error(data.message || `notion request failed ${response.status}`);
+  }
+  return data;
+}
+
+async function updateNotionCommandPage(page, update) {
+  const properties = {};
+  addNotionPropertyUpdate(page, properties, ["실행", "처리", "승인"], "checkbox", update.run);
+  addNotionPropertyUpdate(page, properties, ["처리상태", "상태"], "status", update.status);
+  addNotionPropertyUpdate(page, properties, ["처리결과", "결과"], "text", update.result);
+  addNotionPropertyUpdate(page, properties, ["만료일", "구독만료일"], "date", update.expiresAt);
+  addNotionPropertyUpdate(page, properties, ["처리일시", "처리일", "완료일"], "date", update.processedAt);
+  if (Object.keys(properties).length === 0) return;
+  await notionRequest("PATCH", `/pages/${page.id}`, { properties });
+}
+
+function addNotionPropertyUpdate(page, output, names, kind, value) {
+  if (value === undefined) return;
+  const found = findNotionProperty(page, names);
+  if (!found) return;
+  const [name, property] = found;
+  if (kind === "checkbox" && property.type === "checkbox") {
+    output[name] = { checkbox: Boolean(value) };
+    return;
+  }
+  if (kind === "status") {
+    if (property.type === "status") output[name] = { status: { name: String(value) } };
+    else if (property.type === "select") output[name] = { select: { name: String(value) } };
+    else if (property.type === "rich_text") output[name] = notionRichTextProperty(value);
+    return;
+  }
+  if (kind === "date" && value) {
+    if (property.type === "date") output[name] = { date: { start: String(value) } };
+    else if (property.type === "rich_text") output[name] = notionRichTextProperty(String(value));
+    return;
+  }
+  if (kind === "text") {
+    if (property.type === "rich_text") output[name] = notionRichTextProperty(value);
+    else if (property.type === "url") output[name] = { url: String(value).slice(0, 2000) };
+    else if (property.type === "select") output[name] = { select: { name: String(value).slice(0, 100) } };
+    else if (property.type === "status") output[name] = { status: { name: String(value).slice(0, 100) } };
+  }
+}
+
+function notionRichTextProperty(value) {
+  return {
+    rich_text: [
+      {
+        type: "text",
+        text: { content: String(value || "").slice(0, 1800) },
+      },
+    ],
+  };
+}
+
+async function appendNotionCommandLog(pageId, content) {
+  try {
+    await notionRequest("PATCH", `/blocks/${pageId}/children`, {
+      children: [
+        {
+          object: "block",
+          type: "paragraph",
+          paragraph: {
+            rich_text: [
+              {
+                type: "text",
+                text: { content: `[${new Date().toISOString()}] ${String(content).slice(0, 1800)}` },
+              },
+            ],
+          },
+        },
+      ],
+    });
+  } catch (error) {
+    console.warn(`NOTION_COMMAND_LOG_APPEND_FAILED page=${shortHash(pageId)} reason=${error.message || "unknown"}`);
+  }
+}
+
+function notionPageDatabaseId(page) {
+  return page?.parent?.type === "database_id" ? page.parent.database_id : "";
+}
+
+function findNotionProperty(page, names) {
+  const properties = page?.properties || {};
+  for (const name of names) {
+    if (properties[name]) return [name, properties[name]];
+  }
+  return null;
+}
+
+function notionPropertyText(page, names) {
+  const found = findNotionProperty(page, names);
+  if (found) return notionPropertyValueText(found[1]);
+  const title = Object.values(page?.properties || {}).find((property) => property.type === "title");
+  return title ? notionPropertyValueText(title) : "";
+}
+
+function notionPropertyValueText(property) {
+  if (!property) return "";
+  if (property.type === "title") return richTextArrayPlain(property.title);
+  if (property.type === "rich_text") return richTextArrayPlain(property.rich_text);
+  if (property.type === "phone_number") return property.phone_number || "";
+  if (property.type === "email") return property.email || "";
+  if (property.type === "url") return property.url || "";
+  if (property.type === "select") return property.select?.name || "";
+  if (property.type === "status") return property.status?.name || "";
+  if (property.type === "number") return String(property.number ?? "");
+  if (property.type === "date") return property.date?.start || "";
+  return "";
+}
+
+function richTextArrayPlain(items) {
+  return Array.isArray(items) ? items.map((item) => item.plain_text || item.text?.content || "").join("") : "";
+}
+
+function notionPropertyCheckbox(page, names) {
+  const found = findNotionProperty(page, names);
+  return Boolean(found && found[1].type === "checkbox" && found[1].checkbox);
+}
+
+function notionPropertyNumber(page, names) {
+  const found = findNotionProperty(page, names);
+  if (!found || found[1].type !== "number") return null;
+  return Number(found[1].number);
+}
+
+function sanitizeNotionId(value) {
+  const text = String(value || "").replace(/-/g, "").trim().toLowerCase();
+  return /^[0-9a-f]{32}$/.test(text) ? text.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5") : "";
+}
+
+function shortHash(value) {
+  return sha256(value).slice(0, 8);
 }
 
 function defaultLicenseStore() {
