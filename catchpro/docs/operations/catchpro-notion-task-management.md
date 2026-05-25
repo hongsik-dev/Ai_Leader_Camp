@@ -39,6 +39,12 @@ node .\scripts\notion\catchpro-notion-tasks.mjs update --title "Navi Pro AWS 동
 node .\scripts\notion\catchpro-notion-tasks.mjs done --title "Navi Pro AWS 동기화 검증" --github-pr "https://github.com/hongsik-dev/Ai_Leader_Camp/pull/1" --blog-url "https://hongsik.blog/example/"
 ```
 
+작업 상세 페이지에 내용 추가:
+
+```powershell
+node .\scripts\notion\catchpro-notion-tasks.mjs append --title "CatchPro 작업본부 구축 프로젝트" --heading "진행 내용" --bullets "GitHub 운영 규칙 문서화|Notion CLI 상세 기록 지원"
+```
+
 완료 체크만 바꿀 때:
 
 ```powershell

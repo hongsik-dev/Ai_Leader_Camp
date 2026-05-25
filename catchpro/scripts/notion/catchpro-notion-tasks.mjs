@@ -10,6 +10,7 @@ function usage() {
   console.log(`Usage:
   node scripts/notion/catchpro-notion-tasks.mjs add --title "작업명" [--status 예정] [--priority P2] [--type Android] [--version 공통] [--memo "..."] [--checked false] [--sort-order 10] [--status-order 2]
   node scripts/notion/catchpro-notion-tasks.mjs update --title "작업명" [--status 진행중] [--github-pr URL] [--blog-url URL] [--memo "..."] [--checked true] [--sort-order 10] [--status-order 1]
+  node scripts/notion/catchpro-notion-tasks.mjs append --title "작업명" [--heading "제목"] [--paragraph "내용"] [--bullets "항목1|항목2"]
   node scripts/notion/catchpro-notion-tasks.mjs done --title "작업명" [--github-pr URL] [--blog-url URL] [--memo "..."] [--checked true]
   node scripts/notion/catchpro-notion-tasks.mjs list [--status 진행중]
 
@@ -103,6 +104,22 @@ function richTextProperty(value) {
   return value ? { rich_text: [{ text: { content: value } }] } : undefined;
 }
 
+function richText(content) {
+  return [{ text: { content } }];
+}
+
+function headingBlock(content) {
+  return { object: "block", type: "heading_2", heading_2: { rich_text: richText(content) } };
+}
+
+function paragraphBlock(content) {
+  return { object: "block", type: "paragraph", paragraph: { rich_text: richText(content) } };
+}
+
+function bulletBlock(content) {
+  return { object: "block", type: "bulleted_list_item", bulleted_list_item: { rich_text: richText(content) } };
+}
+
 function compactProperties(properties) {
   return Object.fromEntries(Object.entries(properties).filter(([, value]) => value !== undefined));
 }
@@ -194,6 +211,37 @@ async function updateTask(args) {
   };
 }
 
+async function appendTaskDetails(args) {
+  const pageId = args.id || (await findTaskByTitle(args.title))?.id;
+  if (!pageId) {
+    throw new Error("--id 또는 존재하는 --title 값이 필요합니다.");
+  }
+
+  const children = [];
+  if (args.heading) children.push(headingBlock(args.heading));
+  if (args.paragraph) children.push(paragraphBlock(args.paragraph));
+  if (args.bullets) {
+    String(args.bullets)
+      .split("|")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .forEach((item) => children.push(bulletBlock(item)));
+  }
+
+  if (children.length === 0) {
+    throw new Error("--heading, --paragraph, --bullets 중 하나가 필요합니다.");
+  }
+
+  const result = await notionRequest(`/blocks/${pageId}/children`, {
+    method: "PATCH",
+    body: { children },
+  });
+  return {
+    id: pageId,
+    appended: result.results.length,
+  };
+}
+
 async function completeTask(args) {
   const today = new Date().toISOString().slice(0, 10);
   return updateTask({
@@ -255,6 +303,8 @@ async function main() {
     result = await createTask(args);
   } else if (command === "update") {
     result = await updateTask(args);
+  } else if (command === "append") {
+    result = await appendTaskDetails(args);
   } else if (command === "done") {
     result = await completeTask(args);
   } else if (command === "list") {
