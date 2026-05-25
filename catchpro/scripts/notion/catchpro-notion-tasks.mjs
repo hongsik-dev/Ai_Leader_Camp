@@ -8,9 +8,9 @@ const databaseId = process.env.NOTION_DATABASE_ID;
 
 function usage() {
   console.log(`Usage:
-  node scripts/notion/catchpro-notion-tasks.mjs add --title "작업명" [--status 예정] [--priority P2] [--type Android] [--version 공통] [--memo "..."]
-  node scripts/notion/catchpro-notion-tasks.mjs update --title "작업명" [--status 진행중] [--github-pr URL] [--blog-url URL] [--memo "..."]
-  node scripts/notion/catchpro-notion-tasks.mjs done --title "작업명" [--github-pr URL] [--blog-url URL] [--memo "..."]
+  node scripts/notion/catchpro-notion-tasks.mjs add --title "작업명" [--status 예정] [--priority P2] [--type Android] [--version 공통] [--memo "..."] [--checked false] [--sort-order 10] [--status-order 2]
+  node scripts/notion/catchpro-notion-tasks.mjs update --title "작업명" [--status 진행중] [--github-pr URL] [--blog-url URL] [--memo "..."] [--checked true] [--sort-order 10] [--status-order 1]
+  node scripts/notion/catchpro-notion-tasks.mjs done --title "작업명" [--github-pr URL] [--blog-url URL] [--memo "..."] [--checked true]
   node scripts/notion/catchpro-notion-tasks.mjs list [--status 진행중]
 
 Required env:
@@ -80,6 +80,21 @@ function dateProperty(value) {
   return value ? { date: { start: value } } : undefined;
 }
 
+function checkboxProperty(value) {
+  if (value === undefined) return undefined;
+  if (typeof value === "boolean") return { checkbox: value };
+  return { checkbox: ["1", "true", "yes", "y", "on", "완료"].includes(String(value).toLowerCase()) };
+}
+
+function numberProperty(value) {
+  if (value === undefined || value === "") return undefined;
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    throw new Error(`숫자 값이 필요합니다: ${value}`);
+  }
+  return { number };
+}
+
 function urlProperty(value) {
   return value ? { url: value } : undefined;
 }
@@ -104,6 +119,9 @@ function buildCreateProperties(args) {
     "GitHub PR": urlProperty(args["github-pr"]),
     "블로그 URL": urlProperty(args["blog-url"]),
     메모: richTextProperty(args.memo),
+    체크: checkboxProperty(args.checked),
+    정렬순서: numberProperty(args["sort-order"] || args.sortOrder),
+    상태순서: numberProperty(args["status-order"] || args.statusOrder),
   });
 }
 
@@ -118,6 +136,9 @@ function buildUpdateProperties(args) {
     "GitHub PR": urlProperty(args["github-pr"]),
     "블로그 URL": urlProperty(args["blog-url"]),
     메모: richTextProperty(args.memo),
+    체크: checkboxProperty(args.checked),
+    정렬순서: numberProperty(args["sort-order"] || args.sortOrder),
+    상태순서: numberProperty(args["status-order"] || args.statusOrder),
   });
   return properties;
 }
@@ -178,6 +199,7 @@ async function completeTask(args) {
   return updateTask({
     ...args,
     status: "완료",
+    checked: args.checked ?? true,
     doneDate: args.doneDate || args["done-date"] || today,
   });
 }
@@ -213,6 +235,7 @@ async function listTasks(args) {
     priority: plainSelect(page, "우선순위"),
     type: plainSelect(page, "구분"),
     version: plainSelect(page, "버전"),
+    checked: page.properties?.체크?.checkbox || false,
     url: page.url,
   }));
 }

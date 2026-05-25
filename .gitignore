@@ -28,6 +28,33 @@ wp-content/cache/
 wp-content/upgrade/
 
 # CatchPro Android local/generated files
+local.properties
+.android/
+.android-user/
+.android-user-home/
+.gradle/
+.gradle-home/
+.gradle-user/
+.gradle-user-home/
+.kotlin/
+.tmp-debug/
+build/
+*.db
+*.db-*
+*.preferences_pb
+analysis/
+analysis_logs/
+captures/
+data/
+diagnostics/
+tmp_device_logs/
+tmp_naver_aar/
+wp-content-seed/
+.workspace-archive/
+
+# Canonical Android project lives in catchpro/.
+# Root-level app/docs/gradle files are treated as shadow copies and must be
+# audited before archiving because some can differ from the canonical project.
 catchpro/local.properties
 catchpro/.gradle/
 catchpro/.idea/

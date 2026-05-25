@@ -24,19 +24,25 @@ $env:NOTION_DATABASE_ID = "36bd426b-def3-810d-9a95-dbb02d1aaf7f"
 작업 등록:
 
 ```powershell
-node .\scripts\notion\catchpro-notion-tasks.mjs add --title "Navi Pro AWS 동기화 검증" --status "예정" --priority P1 --type Android --version Navi --memo "배포 전 실제 폰 기준으로 확인"
+node .\scripts\notion\catchpro-notion-tasks.mjs add --title "Navi Pro AWS 동기화 검증" --status "예정" --priority P1 --type Android --version Navi --sort-order 20 --status-order 2 --memo "배포 전 실제 폰 기준으로 확인"
 ```
 
 작업 상태 변경:
 
 ```powershell
-node .\scripts\notion\catchpro-notion-tasks.mjs update --title "Navi Pro AWS 동기화 검증" --status "진행중"
+node .\scripts\notion\catchpro-notion-tasks.mjs update --title "Navi Pro AWS 동기화 검증" --status "진행중" --status-order 1
 ```
 
 작업 완료:
 
 ```powershell
 node .\scripts\notion\catchpro-notion-tasks.mjs done --title "Navi Pro AWS 동기화 검증" --github-pr "https://github.com/hongsik-dev/Ai_Leader_Camp/pull/1" --blog-url "https://hongsik.blog/example/"
+```
+
+완료 체크만 바꿀 때:
+
+```powershell
+node .\scripts\notion\catchpro-notion-tasks.mjs update --title "Navi Pro AWS 동기화 검증" --checked true
 ```
 
 작업 목록 확인:
@@ -52,3 +58,5 @@ node .\scripts\notion\catchpro-notion-tasks.mjs list --status "진행중"
 - 코드 리뷰나 사용자 확인이 필요하면 `검토중`으로 둔다.
 - GitHub PR, 블로그 글, 배포가 끝나면 `완료`로 바꾸고 링크를 남긴다.
 - Insung 오더확정 속도에 영향을 줄 수 있는 작업은 `P1` 이상으로 관리한다.
+- 목록 첫 화면은 `이름`, `체크`, `우선순위` 중심으로 보고, 자세한 내용은 각 작업 하위 페이지에 적는다.
+- `정렬순서`는 낮을수록 위에 보이게 둔다. P0 작업은 보통 1~99 범위를 사용한다.
