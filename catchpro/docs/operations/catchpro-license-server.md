@@ -32,6 +32,19 @@ This endpoint requires the `X-CatchPro-Admin-Token` header and the server-side `
 
 `register-device` binds an existing license to a device. `list` and `upsert` are for the WordPress admin license manager. They should only be called from an authenticated admin page or trusted maintenance script.
 
+## Local Admin CLI
+
+WordPress 관리자 화면을 열지 않고 처리할 때는 [CatchPro 라이선스 관리 CLI](./catchpro-license-admin-cli.md)를 사용한다.
+
+```powershell
+node catchpro/scripts/license/catchpro-license-admin.mjs list --within-days 7
+node catchpro/scripts/license/catchpro-license-admin.mjs trial --name "홍길동" --phone "01012345678" --memo "신규 신청 체험" --notion
+node catchpro/scripts/license/catchpro-license-admin.mjs extend --phone "01012345678" --memo "결제 확인" --notion
+node catchpro/scripts/license/catchpro-license-admin.mjs reset-device --phone "01012345678" --memo "기기 변경" --notion
+```
+
+이 CLI는 고객명, 연락처, 기기값을 출력과 Notion 운영 로그에서 마스킹한다.
+
 ## WordPress Admin Flow
 
 The CatchPro apply plugin can manage licenses without SSH editing.

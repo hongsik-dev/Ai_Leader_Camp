@@ -71,6 +71,7 @@ CatchPro 작업본부는 개발, 배포, 고객 신청, 라이선스, 상담, �
 - Insung hot path에는 지도, 네트워크, 무거운 DB 작업을 넣지 않는다.
 - 고객 신청, 라이선스, 챗봇, 서버, 블로그, APK 배포 처리 결과는 [운영 로그 Notion 기록](./catchpro-ops-notion-log.md) 절차로 남긴다.
 - 운영 로그에는 연락처, 이메일, 기기 ID, API key, token 원문을 남기지 않는다.
+- 고객 구독 연장, 체험 시작, 만료, 차단, 기기 초기화는 [라이선스 관리 CLI](./catchpro-license-admin-cli.md) 또는 WordPress 라이선스 관리 화면으로 처리한다.
 
 ## 당장 진행할 작업
 
@@ -88,3 +89,12 @@ node catchpro/scripts/notion/catchpro-ops-log.mjs license --action trial --custo
 ```
 
 검증 후 `--dry-run`을 빼면 실제 Notion 작업본부에 기록된다.
+
+## 라이선스 운영 명령
+
+WordPress 관리자 화면을 열기 어려운 경우 로컬 CLI로 처리한다.
+
+```powershell
+node catchpro/scripts/license/catchpro-license-admin.mjs list --within-days 7
+node catchpro/scripts/license/catchpro-license-admin.mjs extend --phone "01012345678" --memo "결제 확인" --notion
+```

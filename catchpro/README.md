@@ -11,6 +11,7 @@ Android project scaffold for the CatchPro return-route assistant.
 - [GitHub 운영 규칙](./docs/operations/catchpro-github-release-process.md)
 - [Notion 작업 관리](./docs/operations/catchpro-notion-task-management.md)
 - [운영 로그 Notion 기록](./docs/operations/catchpro-ops-notion-log.md)
+- [라이선스 관리 CLI](./docs/operations/catchpro-license-admin-cli.md)
 - [작업트리 관리](./docs/operations/catchpro-worktree-management.md)
 
 ## Current scope
