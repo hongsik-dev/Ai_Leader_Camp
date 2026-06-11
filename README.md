@@ -1,10 +1,10 @@
-# Ai_Leader_Camp
+# Ai_HealthCare
 
-AI 리더 캠프 학습 과정을 기록하기 위한 WordPress 블로그 테마와 초기 콘텐츠입니다.
+Ai_HealthCare 학습 과정을 기록하기 위한 WordPress 블로그 테마와 초기 콘텐츠입니다.
 
 ## 구성
 
-- `hongsik-log/`: AI 리더 캠프 학습 기록용 미니멀 WordPress 테마
+- `hongsik-log/`: Ai_HealthCare 학습 기록용 미니멀 WordPress 테마
 - `wp-content-seed/`: About 페이지와 첫 글 초기 콘텐츠
 
 ## 서버
