@@ -36,7 +36,7 @@
 
   function collect() {
     return {
-      topic: valueOf("topic") || "오늘의 AI 리더 캠프 학습 기록",
+      topic: valueOf("topic") || "오늘의 Ai_HealthCare 학습 기록",
       summary: valueOf("summary"),
       problem: valueOf("problem"),
       solution: valueOf("solution"),
@@ -133,7 +133,7 @@
 
   function buildPrompt(data) {
     return [
-      "너는 AI 리더 캠프 학습자의 블로그 작성 비서야.",
+      "너는 Ai_HealthCare 학습자의 블로그 작성 비서야.",
       "내 목표는 오늘 배운 내용을 내 언어로 정리하고, 실제 실행 기록으로 남기는 것이야.",
       "",
       `내 업무 스타일은 '${data.style}'이야.`,
@@ -159,7 +159,7 @@
       `<table><tbody>`,
       `<tr><th>발행 카테고리</th><td>학습 AI트랙</td></tr>`,
       `<tr><th>추천 발행일</th><td>${date}</td></tr>`,
-      `<tr><th>핵심 사용자</th><td>AI 리더 캠프 학습 기록을 꾸준히 남기려는 학습자</td></tr>`,
+      `<tr><th>핵심 사용자</th><td>Ai_HealthCare 학습 기록을 꾸준히 남기려는 학습자</td></tr>`,
       `<tr><th>검증 질문</th><td>이 글이 오늘 배운 내용을 내 언어로 설명하고 있는가?</td></tr>`,
       `</tbody></table>`,
       `<ol class="assistant-checklist">`,

@@ -7,6 +7,10 @@ Ai_HealthCare 학습 과정을 기록하기 위한 WordPress 블로그 테마와
 - `hongsik-log/`: Ai_HealthCare 학습 기록용 미니멀 WordPress 테마
 - `wp-content-seed/`: About 페이지와 첫 글 초기 콘텐츠
 
+## 콘텐츠 메모
+
+- `wp-content-seed/catchpro-dev-field-log-2026-05-11.html`: CatchPro 고도화 개발일지 + 현장검증일지
+
 ## 서버
 
 - WordPress: Bitnami WordPress

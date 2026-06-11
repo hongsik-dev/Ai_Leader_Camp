@@ -21,7 +21,7 @@ $published_posts = get_posts(
 $nodes = array(
 	'root' => array(
 		'id'    => 'root',
-		'label' => 'AI 리더 캠프',
+		'label' => 'Ai_HealthCare',
 		'type'  => 'root',
 		'url'   => home_url( '/' ),
 	),

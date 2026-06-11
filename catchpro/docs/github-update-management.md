@@ -25,7 +25,7 @@ The parent repository also contains blog and WordPress content. Keep CatchPro ap
 2. Run verification:
 
 ```powershell
-cd C:\Users\misoh\Ai_Reader_Camp\catchpro
+cd C:\Users\misoh\Ai_HealthCare\catchpro
 .\gradlew.bat testDebugUnitTest assembleDebug
 ```
 
